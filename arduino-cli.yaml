@@ -1,0 +1,5 @@
+board_manager:
+    additional_urls: []
+
+directories:
+    user: /Users/riangadey/voxpin/arduino-libraries
