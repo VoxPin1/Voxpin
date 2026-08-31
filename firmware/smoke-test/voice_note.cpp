@@ -2,6 +2,7 @@
 
 #include <HTTPClient.h>
 #include <WiFi.h>
+#include <WiFiClient.h>
 #include <stdio.h>
 
 #include "audio_bsp.h"
@@ -40,7 +41,55 @@ static bool boot_pressed(void)
   return gpio_get_level(BOOT_BUTTON_PIN) == 0;
 }
 
-static bool upload_pcm(const uint8_t *data, uint32_t len)
+static void play_pcm(const uint8_t *data, uint32_t len)
+{
+  uint32_t offset = 0;
+  while (offset < len) {
+    uint32_t n = len - offset;
+    if (n > kChunkBytes) {
+      n = kChunkBytes;
+    }
+    audio_playback_write((void *)(data + offset), n);
+    offset += n;
+  }
+}
+
+static uint32_t read_response(HTTPClient &http, uint8_t *dest, uint32_t max_len)
+{
+  int remaining = http.getSize();
+  WiFiClient *stream = http.getStreamPtr();
+  uint32_t got = 0;
+  uint32_t deadline = millis() + 90000;
+
+  while (http.connected() && got < max_len && millis() < deadline) {
+    if (remaining == 0) {
+      break;
+    }
+    size_t avail = stream->available();
+    if (avail == 0) {
+      vTaskDelay(pdMS_TO_TICKS(1));
+      continue;
+    }
+    uint32_t want = max_len - got;
+    if (avail < want) {
+      want = avail;
+    }
+    int n = stream->readBytes(dest + got, want);
+    if (n <= 0) {
+      break;
+    }
+    got += (uint32_t)n;
+    if (remaining > 0) {
+      remaining -= n;
+      if (remaining <= 0) {
+        break;
+      }
+    }
+  }
+  return got;
+}
+
+static bool handle_clip(uint8_t *data, uint32_t len)
 {
   if (WiFi.status() != WL_CONNECTED) {
     set_status("No WiFi");
@@ -51,25 +100,46 @@ static bool upload_pcm(const uint8_t *data, uint32_t len)
   snprintf(url, sizeof(url), "http://%s:%d/note", BACKEND_HOST, BACKEND_PORT);
 
   HTTPClient http;
-  http.setTimeout(45000);
+  http.setTimeout(90000);
   if (!http.begin(url)) {
     set_status("Send failed");
     return false;
   }
+
   http.addHeader("Content-Type", "application/octet-stream");
   http.addHeader("X-Sample-Rate", "16000");
   http.addHeader("X-Channels", "2");
   http.addHeader("X-Bits", "16");
 
-  int code = http.POST(const_cast<uint8_t *>(data), len);
-  http.end();
-
-  if (code == 200) {
+  int code = http.POST(data, len);
+  if (code == 204) {
+    http.end();
     return true;
   }
-  ESP_LOGE(TAG, "POST failed, HTTP %d", code);
-  set_status("Send failed");
-  return false;
+  if (code == 200) {
+    http.end();
+    set_status("Saved");
+    vTaskDelay(pdMS_TO_TICKS(4000));
+    return true;
+  }
+  if (code != 201) {
+    ESP_LOGE(TAG, "POST failed, HTTP %d", code);
+    http.end();
+    set_status("Send failed");
+    return false;
+  }
+
+  set_status("Translating");
+  uint32_t spoken = read_response(http, data, kMaxBytes);
+  http.end();
+
+  if (spoken < 2048) {
+    set_status("Speak failed");
+    return false;
+  }
+
+  play_pcm(data, spoken);
+  return true;
 }
 
 static void voice_note_task(void *arg)
@@ -107,11 +177,7 @@ static void voice_note_task(void *arg)
     }
 
     set_status("Sending");
-    if (upload_pcm(audio_buf, written)) {
-      set_status("Saved");
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(4000));
+    handle_clip(audio_buf, written);
     set_status("");
   }
 }

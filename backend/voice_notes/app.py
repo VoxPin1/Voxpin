@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Receive a voice clip from the ESP32, transcribe it, append to Google Docs."""
+"""Route hold-to-talk clips: 'take notes …' → Google Docs, 'translate this …' → Spanish speech."""
 
 from __future__ import annotations
 
@@ -7,12 +7,13 @@ import argparse
 import audioop
 import io
 import os
+import re
 import sys
 import tempfile
 import wave
 from datetime import datetime
 
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 CREDENTIALS_PATH = os.path.join(DIR, "credentials.json")
@@ -173,12 +174,67 @@ def transcribe(wav_bytes: bytes) -> str:
         tmp.flush()
         with sr.AudioFile(tmp.name) as source:
             audio = recognizer.record(source)
-    return recognizer.recognize_google(audio, language="en-US")
+    try:
+        return recognizer.recognize_google(audio, language="en-US")
+    except sr.UnknownValueError:
+        return ""
+
+
+NOTE_PREFIX = re.compile(
+    r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?take\s+(?:a\s+)?notes?\b[\s,.:;!\-]*",
+    re.IGNORECASE,
+)
+TRANSLATE_PREFIX = re.compile(
+    r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?"
+    r"translate(?:\s+this|\s+that)?\b[\s,.:;!\-]*",
+    re.IGNORECASE,
+)
+
+
+def parse_command(transcript: str) -> tuple[str | None, str]:
+    text = transcript.strip()
+    match = NOTE_PREFIX.match(text)
+    if match:
+        return "note", text[match.end() :].strip(" ,.-")
+    match = TRANSLATE_PREFIX.match(text)
+    if match:
+        return "translate", text[match.end() :].strip(" ,.-")
+    return None, text
+
+
+def translate_en_to_es(text: str) -> str:
+    from deep_translator import GoogleTranslator, MyMemoryTranslator
+
+    try:
+        return GoogleTranslator(source="en", target="es").translate(text)
+    except Exception:
+        return MyMemoryTranslator(source="english", target="spanish").translate(text)
+
+
+def speak_spanish_pcm(text: str, sample_rate: int, channels: int) -> bytes:
+    import miniaudio
+    from gtts import gTTS
+
+    mp3 = io.BytesIO()
+    gTTS(text=text, lang="es", lang_check=False).write_to_fp(mp3)
+    decoded = miniaudio.decode(
+        mp3.getvalue(),
+        output_format=miniaudio.SampleFormat.SIGNED16,
+        nchannels=channels,
+        sample_rate=sample_rate,
+    )
+    return decoded.samples.tobytes()
+
+
+def json_action(action: str, **payload):
+    resp = jsonify({"ok": True, "action": action, **payload})
+    resp.headers["X-Action"] = action
+    return resp
 
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True, "document_id": DOCUMENT_ID})
+    return jsonify({"ok": True, "document_id": DOCUMENT_ID, "mode": "commands"})
 
 
 @app.post("/note")
@@ -194,18 +250,40 @@ def note():
 
     try:
         wav_bytes = pcm_to_wav(pcm, sample_rate, channels, sample_width)
-        text = transcribe(wav_bytes).strip()
-        if not text:
-            return jsonify({"ok": False, "error": "empty transcript"}), 400
-        append_to_doc(text)
+        transcript = transcribe(wav_bytes).strip()
+        action, text = parse_command(transcript)
+        if action is None or not text:
+            print(f"ignored: {transcript!r}")
+            resp = Response(status=204)
+            resp.headers["X-Action"] = "none"
+            return resp
+
+        if action == "note":
+            append_to_doc(text)
+            print(f"note: {text}")
+            return json_action("note", text=text)
+
+        spanish = translate_en_to_es(text).strip()
+        if not spanish:
+            return jsonify({"ok": False, "error": "empty translation"}), 500
+        spoken = speak_spanish_pcm(spanish, sample_rate, channels)
+        if not spoken:
+            return jsonify({"ok": False, "error": "empty speech"}), 500
+        print(f"EN: {text}")
+        print(f"ES: {spanish}")
+        resp = Response(spoken, mimetype="application/octet-stream")
+        resp.headers["X-Action"] = "translate"
+        resp.headers["X-Sample-Rate"] = str(sample_rate)
+        resp.headers["X-Channels"] = str(channels)
+        resp.headers["X-Bits"] = "16"
+        resp.status_code = 201
+        return resp
     except FileNotFoundError as err:
         return jsonify({"ok": False, "error": str(err)}), 500
     except RuntimeError as err:
         return jsonify({"ok": False, "error": str(err)}), 500
     except Exception as err:
         return jsonify({"ok": False, "error": str(err)}), 500
-
-    return jsonify({"ok": True, "text": text})
 
 
 def main() -> int:

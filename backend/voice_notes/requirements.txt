@@ -3,3 +3,6 @@ google-api-python-client>=2.0
 google-auth-httplib2>=0.2
 google-auth-oauthlib>=1.2
 SpeechRecognition>=3.10
+gTTS>=2.5
+deep-translator>=1.11
+miniaudio>=1.61
