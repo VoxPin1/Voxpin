@@ -1,5 +1,7 @@
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
+#include <HTTPClient.h>
 #include <WiFi.h>
 #include "freertos/FreeRTOS.h"
 #include "user_app.h"
@@ -13,6 +15,7 @@
 #include "i2c_bsp.h"
 #include "i2c_equipment.h"
 #include "adc_bsp.h"
+#include "backend_config.h"
 #include "voice_note.h"
 
 epaper_driver_display *driver = NULL;
@@ -23,9 +26,10 @@ lv_ui src_ui;
 static lv_obj_t *status_label = NULL;
 
 typedef struct {
+  lv_obj_t *battery_bar;
   lv_obj_t *time_label;
   lv_obj_t *date_label;
-  lv_obj_t *battery_label;
+  lv_obj_t *event_label;
 } home_screen_t;
 
 static int battery_percent(float voltage)
@@ -99,6 +103,87 @@ void user_app_init(void)
   driver->EPD_Init_Partial();
 }
 
+static bool json_str(const char *json, const char *key, char *out, size_t out_len)
+{
+  char needle[40];
+  snprintf(needle, sizeof(needle), "\"%s\"", key);
+  const char *p = strstr(json, needle);
+  if (p == NULL) {
+    out[0] = '\0';
+    return false;
+  }
+  p = strchr(p + 1, ':');
+  if (p == NULL) {
+    out[0] = '\0';
+    return false;
+  }
+  p++;
+  while (*p == ' ') {
+    p++;
+  }
+  if (*p != '"') {
+    out[0] = '\0';
+    return false;
+  }
+  p++;
+  size_t i = 0;
+  while (*p != '\0' && *p != '"' && i + 1 < out_len) {
+    if (*p == '\\' && p[1] != '\0') {
+      p++;
+    }
+    out[i++] = *p++;
+  }
+  out[i] = '\0';
+  return true;
+}
+
+static void refresh_event_label(lv_obj_t *label)
+{
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  char url[80];
+  snprintf(url, sizeof(url), "http://%s:%d/next-event", BACKEND_HOST, BACKEND_PORT);
+
+  HTTPClient http;
+  http.setTimeout(4000);
+  if (!http.begin(url)) {
+    return;
+  }
+
+  int code = http.GET();
+  if (code == 204) {
+    lv_label_set_text(label, "");
+    lv_obj_invalidate(label);
+    http.end();
+    return;
+  }
+  if (code != 200) {
+    http.end();
+    return;
+  }
+
+  String body = http.getString();
+  http.end();
+
+  char when[32] = {};
+  char title[64] = {};
+  json_str(body.c_str(), "when", when, sizeof(when));
+  json_str(body.c_str(), "title", title, sizeof(title));
+
+  char event_text[96] = {};
+  if (when[0] != '\0' && title[0] != '\0') {
+    snprintf(event_text, sizeof(event_text), "%s\n%s", when, title);
+  } else if (title[0] != '\0') {
+    snprintf(event_text, sizeof(event_text), "%s", title);
+  } else if (when[0] != '\0') {
+    snprintf(event_text, sizeof(event_text), "%s", when);
+  }
+  lv_label_set_text(label, event_text);
+  lv_obj_invalidate(label);
+}
+
 static void update_home_labels(home_screen_t *home)
 {
   RtcDateTime_t dt = rtc_dev->get_rtcTime();
@@ -121,19 +206,19 @@ static void update_home_labels(home_screen_t *home)
 
   char time_text[16];
   char date_text[24];
-  char battery_text[24];
 
   snprintf(time_text, sizeof(time_text), "%d:%02d", hour12, dt.minute);
   snprintf(date_text, sizeof(date_text), "%s  %s %d  %s", day_name, month_name, dt.day, ampm);
-  snprintf(battery_text, sizeof(battery_text), "Battery %d%%", pct);
 
+  lv_bar_set_value(home->battery_bar, pct, LV_ANIM_OFF);
   lv_label_set_text(home->time_label, time_text);
   lv_label_set_text(home->date_label, date_text);
-  lv_label_set_text(home->battery_label, battery_text);
 
+  lv_obj_invalidate(home->battery_bar);
   lv_obj_invalidate(home->time_label);
   lv_obj_invalidate(home->date_label);
-  lv_obj_invalidate(home->battery_label);
+
+  refresh_event_label(home->event_label);
 }
 
 static uint32_t ms_until_next_minute(void)
@@ -154,29 +239,47 @@ void home_screen_task(void *arg)
 
   home_screen_t home = {};
 
+  home.battery_bar = lv_bar_create(ui->screen);
+  lv_obj_set_size(home.battery_bar, EPD_WIDTH, 8);
+  lv_obj_align(home.battery_bar, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_set_style_radius(home.battery_bar, 0, LV_PART_MAIN);
+  lv_obj_set_style_radius(home.battery_bar, 0, LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(home.battery_bar, lv_color_white(), LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(home.battery_bar, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_border_width(home.battery_bar, 1, LV_PART_MAIN);
+  lv_obj_set_style_border_color(home.battery_bar, lv_color_black(), LV_PART_MAIN);
+  lv_obj_set_style_pad_all(home.battery_bar, 1, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(home.battery_bar, lv_color_black(), LV_PART_INDICATOR);
+  lv_obj_set_style_bg_opa(home.battery_bar, LV_OPA_COVER, LV_PART_INDICATOR);
+  lv_bar_set_range(home.battery_bar, 0, 100);
+  lv_bar_set_value(home.battery_bar, 0, LV_ANIM_OFF);
+
   home.time_label = lv_label_create(ui->screen);
   lv_obj_set_style_text_font(home.time_label, &lv_font_montserrat_48, 0);
   lv_obj_set_style_text_align(home.time_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_width(home.time_label, EPD_WIDTH);
-  lv_obj_align(home.time_label, LV_ALIGN_TOP_MID, 0, 18);
+  lv_obj_align(home.time_label, LV_ALIGN_TOP_MID, 0, 16);
 
   home.date_label = lv_label_create(ui->screen);
   lv_obj_set_style_text_font(home.date_label, &lv_font_montserrat_24, 0);
   lv_obj_set_style_text_align(home.date_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_width(home.date_label, EPD_WIDTH);
-  lv_obj_align(home.date_label, LV_ALIGN_TOP_MID, 0, 88);
+  lv_obj_align(home.date_label, LV_ALIGN_TOP_MID, 0, 78);
 
-  home.battery_label = lv_label_create(ui->screen);
-  lv_obj_set_style_text_font(home.battery_label, &lv_font_montserrat_28, 0);
-  lv_obj_set_style_text_align(home.battery_label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_width(home.battery_label, EPD_WIDTH);
-  lv_obj_align(home.battery_label, LV_ALIGN_TOP_MID, 0, 138);
+  home.event_label = lv_label_create(ui->screen);
+  lv_obj_set_style_text_font(home.event_label, &lv_font_montserrat_14, 0);
+  lv_obj_set_style_text_align(home.event_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_label_set_long_mode(home.event_label, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(home.event_label, EPD_WIDTH - 12);
+  lv_obj_set_height(home.event_label, 52);
+  lv_obj_align(home.event_label, LV_ALIGN_TOP_MID, 0, 118);
+  lv_label_set_text(home.event_label, "");
 
   status_label = lv_label_create(ui->screen);
   lv_obj_set_style_text_font(status_label, &lv_font_montserrat_14, 0);
   lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_width(status_label, EPD_WIDTH);
-  lv_obj_align(status_label, LV_ALIGN_TOP_MID, 0, 172);
+  lv_obj_align(status_label, LV_ALIGN_TOP_MID, 0, 176);
   lv_label_set_text(status_label, "");
 
   update_home_labels(&home);
@@ -191,5 +294,5 @@ void home_screen_task(void *arg)
 void user_ui_init(void)
 {
   setup_ui(&src_ui);
-  xTaskCreatePinnedToCore(home_screen_task, "home_screen_task", 4 * 1024, &src_ui, 4, NULL, 1);
+  xTaskCreatePinnedToCore(home_screen_task, "home_screen_task", 8 * 1024, &src_ui, 4, NULL, 1);
 }

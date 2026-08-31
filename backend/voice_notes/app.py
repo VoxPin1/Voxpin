@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Route hold-to-talk clips: 'take notes …' → Google Docs, 'translate this …' → Spanish speech."""
+"""Route hold-to-talk clips: notes → Docs, translate → Spanish speech, remind → Calendar."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import re
 import sys
 import tempfile
 import wave
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from flask import Flask, jsonify, request, Response
 
@@ -22,8 +22,11 @@ TOKEN_PATH = os.path.join(DIR, "token.json")
 WEBHOOK_URL_PATH = os.path.join(DIR, "apps_script_url.txt")
 WEBHOOK_SECRET_PATH = os.path.join(DIR, "apps_script_secret.txt")
 DOCUMENT_ID = "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8"
-SCOPES = ["https://www.googleapis.com/auth/documents"]
+DOC_SCOPES = ["https://www.googleapis.com/auth/documents"]
+CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
+SCOPES = DOC_SCOPES + CALENDAR_SCOPES
 DEFAULT_PORT = 8765
+TIMEZONE = os.environ.get("VOXPIN_TZ", "America/Los_Angeles")
 
 app = Flask(__name__)
 
@@ -40,10 +43,7 @@ def _is_service_account_file(path: str) -> bool:
 
 
 def docs_credentials(interactive: bool = True):
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
     from google.oauth2.service_account import Credentials as ServiceAccountCredentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
 
     sa_path = None
     if os.path.exists(SERVICE_ACCOUNT_PATH):
@@ -51,7 +51,7 @@ def docs_credentials(interactive: bool = True):
     elif os.path.exists(CREDENTIALS_PATH) and _is_service_account_file(CREDENTIALS_PATH):
         sa_path = CREDENTIALS_PATH
     if sa_path:
-        return ServiceAccountCredentials.from_service_account_file(sa_path, scopes=SCOPES)
+        return ServiceAccountCredentials.from_service_account_file(sa_path, scopes=DOC_SCOPES)
 
     if not os.path.exists(CREDENTIALS_PATH):
         raise FileNotFoundError(
@@ -59,18 +59,43 @@ def docs_credentials(interactive: bool = True):
             "or save a service account JSON as backend/voice_notes/service_account.json"
         )
 
+    return user_oauth_credentials(interactive=interactive)
+
+
+def _local_tz():
+    try:
+        from zoneinfo import ZoneInfo
+
+        return ZoneInfo(TIMEZONE)
+    except Exception:
+        return datetime.now().astimezone().tzinfo or timezone.utc
+
+
+def now_local() -> datetime:
+    return datetime.now(_local_tz())
+
+
+def user_oauth_credentials(interactive: bool = True):
+    from google.auth.transport.requests import Request
+    from google.oauth2.credentials import Credentials
+    from google_auth_oauthlib.flow import InstalledAppFlow
+
+    if not os.path.exists(CREDENTIALS_PATH):
+        raise FileNotFoundError(
+            "Missing Google credentials. Add credentials.json and run ./run.sh --login"
+        )
+
     creds = None
     if os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
-    if creds and creds.valid:
-        return creds
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
         with open(TOKEN_PATH, "w") as token:
             token.write(creds.to_json())
+    if creds and creds.valid and creds.has_scopes(CALENDAR_SCOPES):
         return creds
     if not interactive:
-        raise RuntimeError("Google login required. Run: ./run.sh --login")
+        raise RuntimeError("Google Calendar login required. Run: ./run.sh --login")
     flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
     creds = flow.run_local_server(port=0)
     with open(TOKEN_PATH, "w") as token:
@@ -102,6 +127,80 @@ def docs_service():
     from googleapiclient.discovery import build
 
     return build("docs", "v1", credentials=docs_credentials(interactive=False))
+
+
+def calendar_ready() -> bool:
+    if not os.path.exists(TOKEN_PATH) or not os.path.exists(CREDENTIALS_PATH):
+        return False
+    try:
+        creds = user_oauth_credentials(interactive=False)
+        return creds.has_scopes(CALENDAR_SCOPES)
+    except Exception:
+        return False
+
+
+def calendar_service():
+    from googleapiclient.discovery import build
+
+    return build("calendar", "v3", credentials=user_oauth_credentials(interactive=False))
+
+
+def _format_event_when(start: dict) -> str:
+    now = now_local()
+    if "dateTime" in start:
+        dt = datetime.fromisoformat(start["dateTime"].replace("Z", "+00:00")).astimezone(_local_tz())
+        if dt.date() == now.date():
+            return dt.strftime("%-I:%M %p")
+        if dt.date() == (now.date() + timedelta(days=1)):
+            return dt.strftime("Tomorrow %-I:%M %p")
+        return dt.strftime("%a %-I:%M %p")
+    day = datetime.strptime(start["date"], "%Y-%m-%d").date()
+    if day == now.date():
+        return "Today"
+    if day == now.date() + timedelta(days=1):
+        return "Tomorrow"
+    return datetime.combine(day, datetime.min.time()).strftime("%a %b %-d")
+
+
+def fetch_next_event() -> dict | None:
+    service = calendar_service()
+    now = datetime.now(timezone.utc)
+    result = (
+        service.events()
+        .list(
+            calendarId="primary",
+            timeMin=now.isoformat(),
+            maxResults=1,
+            singleEvents=True,
+            orderBy="startTime",
+        )
+        .execute()
+    )
+    items = result.get("items") or []
+    if not items:
+        return None
+    event = items[0]
+    title = (event.get("summary") or "(No title)").replace("\n", " ").strip()
+    if len(title) > 48:
+        title = title[:45] + "..."
+    return {"when": _format_event_when(event.get("start") or {}), "title": title}
+
+
+def create_calendar_event(title: str, start: datetime) -> dict:
+    service = calendar_service()
+    end = start + timedelta(minutes=15)
+    body = {
+        "summary": title,
+        "start": {"dateTime": start.isoformat(), "timeZone": TIMEZONE},
+        "end": {"dateTime": end.isoformat(), "timeZone": TIMEZONE},
+        "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 0}]},
+    }
+    created = service.events().insert(calendarId="primary", body=body).execute()
+    return {
+        "when": start.strftime("%-I:%M %p"),
+        "title": title,
+        "id": created.get("id", ""),
+    }
 
 
 def append_via_webhook(text: str, url: str, secret: str) -> None:
@@ -189,6 +288,104 @@ TRANSLATE_PREFIX = re.compile(
     r"translate(?:\s+this|\s+that)?\b[\s,.:;!\-]*",
     re.IGNORECASE,
 )
+REMIND_PREFIX = re.compile(
+    r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?"
+    r"(?:remind\s+me(?:\s+to)?|set\s+(?:a\s+)?reminder(?:\s+to|\s+for)?)\b[\s,.:;!\-]*",
+    re.IGNORECASE,
+)
+IN_DURATION = re.compile(
+    r"\bin\s+(?:an?\s+)?(\d+)?\s*(minutes?|mins?|hours?|hrs?)\b",
+    re.IGNORECASE,
+)
+AT_TIME = re.compile(
+    r"\bat\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\b",
+    re.IGNORECASE,
+)
+AT_NOON = re.compile(r"\bat\s+noon\b", re.IGNORECASE)
+AT_MIDNIGHT = re.compile(r"\bat\s+midnight\b", re.IGNORECASE)
+TOMORROW = re.compile(r"\btomorrow\b", re.IGNORECASE)
+TONIGHT = re.compile(r"\btonight\b", re.IGNORECASE)
+
+
+def _soonest_clock(now: datetime, hours: list[int], minute: int, tomorrow: bool) -> datetime:
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if tomorrow:
+        start += timedelta(days=1)
+    for day_off in range(0, 3):
+        day = start + timedelta(days=day_off)
+        candidates = []
+        for hour in hours:
+            stamp = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            if stamp > now:
+                candidates.append(stamp)
+        if candidates:
+            return min(candidates)
+        if tomorrow:
+            break
+    return now + timedelta(hours=1)
+
+
+def parse_reminder(text: str) -> tuple[str, datetime]:
+    now = now_local()
+    tomorrow = bool(TOMORROW.search(text))
+    leftover = TOMORROW.sub(" ", text)
+
+    when = now + timedelta(hours=1)
+    timed = False
+
+    if AT_NOON.search(leftover):
+        when = _soonest_clock(now, [12], 0, tomorrow)
+        leftover = AT_NOON.sub(" ", leftover)
+        timed = True
+    elif AT_MIDNIGHT.search(leftover):
+        when = _soonest_clock(now, [0], 0, tomorrow)
+        leftover = AT_MIDNIGHT.sub(" ", leftover)
+        timed = True
+
+    match = AT_TIME.search(leftover)
+    if match:
+        hour = int(match.group(1))
+        minute = int(match.group(2) or 0)
+        ampm = (match.group(3) or "").lower().replace(".", "")
+        if ampm.startswith("p"):
+            hours = [hour % 12 + 12]
+        elif ampm.startswith("a"):
+            hours = [0 if hour == 12 else hour]
+        elif hour > 12:
+            hours = [hour]
+        else:
+            hours = [hour % 12, hour % 12 + 12]
+        when = _soonest_clock(now, hours, minute, tomorrow)
+        leftover = AT_TIME.sub(" ", leftover)
+        timed = True
+
+    match = IN_DURATION.search(leftover)
+    if match:
+        amount = int(match.group(1) or 1)
+        unit = match.group(2).lower()
+        if unit.startswith("hour") or unit.startswith("hr"):
+            when = now + timedelta(hours=amount)
+        else:
+            when = now + timedelta(minutes=amount)
+        leftover = IN_DURATION.sub(" ", leftover)
+        timed = True
+
+    if not timed and TONIGHT.search(leftover):
+        when = now.replace(hour=20, minute=0, second=0, microsecond=0)
+        if when <= now:
+            when += timedelta(days=1)
+        leftover = TONIGHT.sub(" ", leftover)
+        timed = True
+
+    if not timed and tomorrow:
+        when = _soonest_clock(now, [9], 0, True)
+
+    leftover = TONIGHT.sub(" ", leftover)
+    title = re.sub(r"\s+", " ", leftover).strip(" ,.-")
+    title = re.sub(r"^(?:to|for)\s+", "", title, flags=re.I).strip(" ,.-")
+    if not title:
+        title = "Reminder"
+    return title, when
 
 
 def parse_command(transcript: str) -> tuple[str | None, str]:
@@ -199,6 +396,9 @@ def parse_command(transcript: str) -> tuple[str | None, str]:
     match = TRANSLATE_PREFIX.match(text)
     if match:
         return "translate", text[match.end() :].strip(" ,.-")
+    match = REMIND_PREFIX.match(text)
+    if match:
+        return "remind", text[match.end() :].strip(" ,.-")
     return None, text
 
 
@@ -234,7 +434,28 @@ def json_action(action: str, **payload):
 
 @app.get("/health")
 def health():
-    return jsonify({"ok": True, "document_id": DOCUMENT_ID, "mode": "commands"})
+    return jsonify(
+        {
+            "ok": True,
+            "document_id": DOCUMENT_ID,
+            "mode": "commands",
+            "calendar": calendar_ready(),
+        }
+    )
+
+
+@app.get("/next-event")
+def next_event():
+    if not calendar_ready():
+        return Response(status=204)
+    try:
+        event = fetch_next_event()
+    except Exception as err:
+        print(f"next-event failed: {err}")
+        return jsonify({"ok": False, "error": str(err)}), 500
+    if not event:
+        return Response(status=204)
+    return jsonify({"ok": True, **event})
 
 
 @app.post("/note")
@@ -263,6 +484,15 @@ def note():
             print(f"note: {text}")
             return json_action("note", text=text)
 
+        if action == "remind":
+            if not calendar_ready():
+                print("remind needs Google Calendar login")
+                return json_action("need_login")
+            title, when = parse_reminder(text)
+            created = create_calendar_event(title, when)
+            print(f"remind: {created['when']} {title}")
+            return json_action("remind", text=title, when=created["when"])
+
         spanish = translate_en_to_es(text).strip()
         if not spanish:
             return jsonify({"ok": False, "error": "empty translation"}), 500
@@ -288,13 +518,17 @@ def note():
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="VoxPin voice-note backend")
-    parser.add_argument("--login", action="store_true", help="Open browser to connect Google Docs")
+    parser.add_argument(
+        "--login",
+        action="store_true",
+        help="Open browser to connect Google Docs and Google Calendar",
+    )
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     args = parser.parse_args()
 
     if args.login:
-        docs_credentials(interactive=True)
-        print("Google Docs connected. You can start the server without --login next time.")
+        user_oauth_credentials(interactive=True)
+        print("Google Calendar connected. You can start the server without --login next time.")
         return 0
 
     if not docs_ready():
@@ -307,6 +541,10 @@ def main() -> int:
 
     print(f"Listening on 0.0.0.0:{args.port}")
     print(f"Appending to document {DOCUMENT_ID}")
+    if calendar_ready():
+        print("Google Calendar connected — next event and reminders enabled")
+    else:
+        print("Google Calendar not connected. Run ./run.sh --login to show events and add reminders.")
     app.run(host="0.0.0.0", port=args.port, threaded=True)
     return 0
 

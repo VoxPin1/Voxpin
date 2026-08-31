@@ -110,6 +110,8 @@ static bool handle_clip(uint8_t *data, uint32_t len)
   http.addHeader("X-Sample-Rate", "16000");
   http.addHeader("X-Channels", "2");
   http.addHeader("X-Bits", "16");
+  const char *header_keys[] = {"X-Action"};
+  http.collectHeaders(header_keys, 1);
 
   int code = http.POST(data, len);
   if (code == 204) {
@@ -117,8 +119,15 @@ static bool handle_clip(uint8_t *data, uint32_t len)
     return true;
   }
   if (code == 200) {
+    String action = http.header("X-Action");
     http.end();
-    set_status("Saved");
+    if (action == "remind") {
+      set_status("Reminded");
+    } else if (action == "need_login") {
+      set_status("Sign in");
+    } else {
+      set_status("Saved");
+    }
     vTaskDelay(pdMS_TO_TICKS(4000));
     return true;
   }
