@@ -2,3 +2,13 @@
 ESP32-S3-ePaper-1.54/
 arduino-libraries/
 **/build/
+**/.venv/
+firmware/wifi-test/wifi_secrets.h
+firmware/smoke-test/wifi_secrets.h
+firmware/smoke-test/backend_config.h
+backend/voice_notes/credentials.json
+backend/voice_notes/service_account.json
+backend/voice_notes/token.json
+backend/voice_notes/apps_script_url.txt
+backend/voice_notes/apps_script_secret.txt
+backend/voice_notes/Code.gs
