@@ -307,6 +307,14 @@ main {
   background: rgba(255, 255, 255, 0.04);
 }
 
+.btn.is-disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.45;
+  pointer-events: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .btn.small {
   padding: 0.45rem 0.9rem;
   font-size: 0.9rem;

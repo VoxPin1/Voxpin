@@ -25,9 +25,11 @@ TOKEN_PATH = os.path.join(DIR, "token.json")
 WEBHOOK_URL_PATH = os.path.join(DIR, "apps_script_url.txt")
 WEBHOOK_SECRET_PATH = os.path.join(DIR, "apps_script_secret.txt")
 DOCUMENT_ID = "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8"
+# Primary calendar for reminders + companion month view (from your Calendar share link).
+CALENDAR_ID = os.environ.get("VOXPIN_CALENDAR_ID", "riangadey12@gmail.com")
 DOC_SCOPES = ["https://www.googleapis.com/auth/documents"]
 CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
-SCOPES = DOC_SCOPES + CALENDAR_SCOPES
+SCOPES = CALENDAR_SCOPES  # reminders / next-event / companion calendar
 DEFAULT_PORT = 8765
 TIMEZONE = os.environ.get("VOXPIN_TZ", "America/Los_Angeles")
 
@@ -177,7 +179,7 @@ def fetch_next_event() -> dict | None:
     result = (
         service.events()
         .list(
-            calendarId="primary",
+            calendarId=CALENDAR_ID,
             timeMin=now.isoformat(),
             maxResults=1,
             singleEvents=True,
@@ -203,7 +205,7 @@ def fetch_calendar_events(days: int = 60) -> list[dict]:
     result = (
         service.events()
         .list(
-            calendarId="primary",
+            calendarId=CALENDAR_ID,
             timeMin=start.isoformat(),
             timeMax=end.isoformat(),
             maxResults=250,
@@ -238,7 +240,7 @@ def create_calendar_event(title: str, start: datetime) -> dict:
         "end": {"dateTime": end.isoformat(), "timeZone": TIMEZONE},
         "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 0}]},
     }
-    created = service.events().insert(calendarId="primary", body=body).execute()
+    created = service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
     return {
         "when": start.strftime("%-I:%M %p"),
         "title": title,
@@ -745,11 +747,23 @@ def api_google_connect():
     """Open a browser Google login, then return to the companion site."""
     from flask import redirect
 
-    if not os.path.exists(CREDENTIALS_PATH) and not _is_service_account_file(CREDENTIALS_PATH):
+    if not os.path.exists(CREDENTIALS_PATH):
         return (
-            "<h1>Missing credentials.json</h1>"
-            "<p>Paste your Google OAuth Desktop client JSON on the companion "
-            "<a href='/#google'>Google</a> tab first.</p>",
+            "<h1>Missing OAuth client</h1>"
+            "<p>Calendar needs a Google Cloud <strong>Desktop</strong> OAuth client JSON. "
+            "Paste it on the companion <a href='/#google'>Google</a> tab → Save credentials, "
+            "then Sign in again.</p>"
+            "<p>(Apps Script alone covers Docs notes, not Calendar.)</p>",
+            400,
+            {"Content-Type": "text/html; charset=utf-8"},
+        )
+    if _is_service_account_file(CREDENTIALS_PATH):
+        return (
+            "<h1>Wrong credential type</h1>"
+            "<p><code>credentials.json</code> is a service account. Calendar sign-in needs an "
+            "OAuth client JSON with an <code>installed</code> or <code>web</code> key "
+            "(Google Cloud → Credentials → Create OAuth client → Desktop app).</p>"
+            "<p><a href='/#google'>Back to Google tab</a></p>",
             400,
             {"Content-Type": "text/html; charset=utf-8"},
         )
@@ -857,6 +871,7 @@ def api_calendar():
                 "connected": False,
                 "events": [],
                 "message": "Connect Google Calendar with ./run.sh --login",
+                "calendar_id": CALENDAR_ID,
             }
         )
     try:
@@ -864,7 +879,15 @@ def api_calendar():
     except Exception as err:
         print(f"calendar list failed: {err}")
         return jsonify({"ok": False, "error": str(err)}), 500
-    return jsonify({"ok": True, "connected": True, "events": events, "timezone": TIMEZONE})
+    return jsonify(
+        {
+            "ok": True,
+            "connected": True,
+            "events": events,
+            "timezone": TIMEZONE,
+            "calendar_id": CALENDAR_ID,
+        }
+    )
 
 
 @app.get("/next-event")

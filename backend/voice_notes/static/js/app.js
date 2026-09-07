@@ -345,26 +345,42 @@
       const data = await api("/api/google/status");
       const docs = data.docs ? "Connected" : "Not connected";
       const cal = data.calendar ? "Connected" : "Not connected";
-      const creds = data.has_credentials
-        ? "OAuth client saved"
-        : data.has_apps_script
-          ? "Apps Script webhook set"
-          : "Missing — paste JSON below";
+      const oauth = data.has_credentials
+        ? data.has_token
+          ? "OAuth client + token saved"
+          : "OAuth client saved (sign-in still needed)"
+        : "Missing — paste Desktop OAuth JSON below";
+      const apps = data.has_apps_script ? "Webhook saved" : "Not set";
       els.googleStatus.innerHTML = `
         <ul class="google-flags">
-          <li><strong>Credentials:</strong> ${escapeHtml(creds)}</li>
-          <li><strong>Google Docs:</strong> ${escapeHtml(docs)}</li>
-          <li><strong>Google Calendar:</strong> ${escapeHtml(cal)}</li>
+          <li><strong>Docs (Apps Script):</strong> ${escapeHtml(apps)} · ${escapeHtml(docs)}</li>
+          <li><strong>Calendar (OAuth):</strong> ${escapeHtml(oauth)} · ${escapeHtml(cal)}</li>
         </ul>`;
       if (els.googleDocLink && data.document_url) {
         els.googleDocLink.href = data.document_url;
+      }
+      const connectBtn = document.getElementById("connectGoogle");
+      if (connectBtn) {
+        if (data.calendar) {
+          connectBtn.setAttribute("aria-disabled", "true");
+          connectBtn.classList.add("is-disabled");
+          connectBtn.removeAttribute("href");
+        } else if (data.has_credentials) {
+          connectBtn.setAttribute("href", "/api/google/connect");
+          connectBtn.removeAttribute("aria-disabled");
+          connectBtn.classList.remove("is-disabled");
+        } else {
+          connectBtn.removeAttribute("href");
+          connectBtn.setAttribute("aria-disabled", "true");
+          connectBtn.classList.add("is-disabled");
+        }
       }
       if (els.googleConnectHint) {
         els.googleConnectHint.textContent = data.calendar
           ? "Calendar signed in."
           : data.has_credentials
-            ? "OAuth credentials ready — click Sign in with Google."
-            : "Optional for Calendar only.";
+            ? "OAuth client ready — click Sign in with Google (browser popup)."
+            : "Paste a Desktop OAuth client JSON and Save before signing in.";
       }
       if (els.appsScriptHint) {
         els.appsScriptHint.textContent = data.has_apps_script

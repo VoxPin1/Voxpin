@@ -173,10 +173,10 @@
           <p class="device-hint" id="appsScriptHint"></p>
         </div>
         <div class="google-card">
-          <h3>2. Optional: OAuth for Calendar</h3>
+          <h3>2. OAuth for Calendar</h3>
           <p class="hint">
-            Only needed for reminders / next-event on the pin. Paste a Desktop OAuth client JSON,
-            then sign in.
+            Required for reminders and next-event on the pin (separate from Apps Script).
+            Create a Desktop OAuth client in Google Cloud, paste the JSON, Save, then Sign in.
           </p>
           <textarea
             id="googleCreds"
@@ -186,7 +186,7 @@
           ></textarea>
           <div class="google-actions">
             <button class="btn primary" id="saveGoogleCreds">Save credentials</button>
-            <a class="btn ghost" id="connectGoogle" href="/api/google/connect">Sign in with Google</a>
+            <a class="btn ghost is-disabled" id="connectGoogle" aria-disabled="true">Sign in with Google</a>
           </div>
           <p class="device-hint" id="googleCredsHint"></p>
           <p class="device-hint" id="googleConnectHint"></p>

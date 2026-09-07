@@ -6,8 +6,8 @@ arduino-libraries/
 firmware/wifi-test/wifi_secrets.h
 firmware/smoke-test/wifi_secrets.h
 firmware/smoke-test/backend_config.h
-backend/voice_notes/credentials.json
+# Keep OAuth client + token in git so Calendar survives clones (private repo).
+# Do not publish this repo publicly while these files are tracked.
 backend/voice_notes/service_account.json
-backend/voice_notes/token.json
 backend/voice_notes/voxpin_data.json
 backend/voice_notes/voxpin_data.json.tmp
