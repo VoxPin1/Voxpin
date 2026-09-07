@@ -24,6 +24,8 @@ static constexpr uint32_t kChunkBytes = 4096;
 static constexpr uint32_t kMaxSeconds = 20;
 static constexpr uint32_t kMaxBytes = kBytesPerSec * kMaxSeconds;
 static constexpr uint32_t kMinBytes = kBytesPerSec / 4;  // ~0.25 s
+static constexpr uint32_t kHoldToTalkMs = 400;
+static constexpr uint32_t kClickAutoSendMs = 8000;
 
 static uint8_t *audio_buf = NULL;
 static voice_status_cb_t status_cb = NULL;
@@ -39,6 +41,23 @@ static void set_status(const char *text)
 static bool boot_pressed(void)
 {
   return gpio_get_level(BOOT_BUTTON_PIN) == 0;
+}
+
+static void wait_boot_release(void)
+{
+  while (boot_pressed()) {
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+  vTaskDelay(pdMS_TO_TICKS(40));  // debounce
+}
+
+// E-paper refreshes slowly — pause so the new status can paint before we block.
+static void show_status(const char *text, uint32_t hold_ms)
+{
+  set_status(text);
+  if (hold_ms > 0) {
+    vTaskDelay(pdMS_TO_TICKS(hold_ms));
+  }
 }
 
 static void play_pcm(const uint8_t *data, uint32_t len)
@@ -92,7 +111,7 @@ static uint32_t read_response(HTTPClient &http, uint8_t *dest, uint32_t max_len)
 static bool handle_clip(uint8_t *data, uint32_t len)
 {
   if (WiFi.status() != WL_CONNECTED) {
-    set_status("No WiFi");
+    show_status("No WiFi", 2500);
     return false;
   }
 
@@ -102,7 +121,7 @@ static bool handle_clip(uint8_t *data, uint32_t len)
   HTTPClient http;
   http.setTimeout(90000);
   if (!http.begin(url)) {
-    set_status("Send failed");
+    show_status("Send failed", 2500);
     return false;
   }
 
@@ -122,28 +141,35 @@ static bool handle_clip(uint8_t *data, uint32_t len)
     String action = http.header("X-Action");
     http.end();
     if (action == "remind") {
-      set_status("Reminded");
+      show_status("Reminded", 3500);
     } else if (action == "need_login") {
-      set_status("Sign in");
+      show_status("Sign in", 3500);
+    } else if (action == "note_local") {
+      show_status("Saved local", 3500);
     } else {
-      set_status("Saved");
+      show_status("Saved", 3500);
     }
-    vTaskDelay(pdMS_TO_TICKS(4000));
     return true;
   }
   if (code != 201) {
     ESP_LOGE(TAG, "POST failed, HTTP %d", code);
     http.end();
-    set_status("Send failed");
+    if (code < 0) {
+      show_status("No server", 2500);
+    } else {
+      char msg[24];
+      snprintf(msg, sizeof(msg), "Fail %d", code);
+      show_status(msg, 2500);
+    }
     return false;
   }
 
-  set_status("Translating");
+  show_status("Translating", 0);
   uint32_t spoken = read_response(http, data, kMaxBytes);
   http.end();
 
   if (spoken < 2048) {
-    set_status("Speak failed");
+    show_status("Speak failed", 2500);
     return false;
   }
 
@@ -168,26 +194,47 @@ static void voice_note_task(void *arg)
       vTaskDelay(pdMS_TO_TICKS(20));
     }
 
-    set_status("Recording");
+    // Start capturing immediately. A short click = record until next click;
+    // a long hold = record until release (classic push-to-talk).
+    show_status("Recording", 0);
     uint32_t written = 0;
-    while (boot_pressed() && written + kChunkBytes <= kMaxBytes) {
+    const uint32_t press_started = millis();
+    bool saw_release = false;
+
+    while (written + kChunkBytes <= kMaxBytes) {
       audio_playback_read(audio_buf + written, kChunkBytes);
       written += kChunkBytes;
+
+      const bool down = boot_pressed();
+      if (!down) {
+        // Held long enough then released → push-to-talk stop.
+        if (!saw_release && (millis() - press_started) >= kHoldToTalkMs) {
+          break;
+        }
+        saw_release = true;
+      } else if (saw_release) {
+        // Second press after a short first click → toggle stop.
+        wait_boot_release();
+        break;
+      }
+
+      // After a short click, auto-send so talking without a 2nd click still works.
+      if (saw_release && (millis() - press_started) >= kClickAutoSendMs) {
+        break;
+      }
     }
 
-    while (boot_pressed()) {
-      vTaskDelay(pdMS_TO_TICKS(20));
-    }
+    wait_boot_release();
 
     if (written < kMinBytes) {
-      set_status("");
-      vTaskDelay(pdMS_TO_TICKS(200));
+      show_status("Too short", 2000);
+      show_status("", 0);
       continue;
     }
 
-    set_status("Sending");
+    show_status("Sending", 1800);
     handle_clip(audio_buf, written);
-    set_status("");
+    show_status("", 0);
   }
 }
 

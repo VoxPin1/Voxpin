@@ -1,4 +1,4 @@
-const SECRET = "replace-with-apps-script-secret";
+const SECRET = "9wYmqDcEu9QOshmVcbuIyQ";
 const DOCUMENT_ID = "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8";
 
 function doPost(e) {
@@ -88,5 +88,5 @@ function bodyForDay(docId, title) {
 }
 
 function authorize() {
-  UrlFetchApp.fetch("https://docs.google.com");
+  UrlFetchApp.fetch("https://www.google.com");
 }

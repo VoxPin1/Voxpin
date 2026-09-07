@@ -2,6 +2,21 @@
 
 ESP32-S3 e-paper (Waveshare 1.54") firmware and tooling.
 
+## Companion website
+
+Run the voice backend to open the VoxPin web app (recordings, translation language, calendar):
+
+```bash
+cd backend/voice_notes
+./run.sh
+```
+
+Then open [http://127.0.0.1:8765/](http://127.0.0.1:8765/).
+
+- **Recordings** — notes, translations, and tasks from the pin
+- **Language** — base language the pin speaks when translating
+- **Calendar** — tasks synced with Google Calendar (`./run.sh --login`)
+
 ## Quick start
 
 1. Clone the official Waveshare examples (not stored in this repo):

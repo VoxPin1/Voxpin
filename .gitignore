@@ -9,6 +9,5 @@ firmware/smoke-test/backend_config.h
 backend/voice_notes/credentials.json
 backend/voice_notes/service_account.json
 backend/voice_notes/token.json
-backend/voice_notes/apps_script_url.txt
-backend/voice_notes/apps_script_secret.txt
-backend/voice_notes/Code.gs
+backend/voice_notes/voxpin_data.json
+backend/voice_notes/voxpin_data.json.tmp
