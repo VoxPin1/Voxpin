@@ -13,7 +13,7 @@ cd backend/voice_notes
 
 Then open [http://127.0.0.1:8765/](http://127.0.0.1:8765/).
 
-A public preview of the companion UI is on GitHub Pages: [https://voxpin1.github.io/Voxpin/](https://voxpin1.github.io/Voxpin/). Recordings, calendar, and Google still need this local server.
+A public preview of the companion UI is on GitHub Pages: [https://voxpin1.github.io/Voxpin/](https://voxpin1.github.io/Voxpin/). Pair the pin over Bluetooth (Chrome/Edge) to keep a profile and language settings in the browser and on the device. Voice recordings and Google Calendar still need this local server.
 
 - **Recordings** — notes, translations, and tasks from the pin
 - **Language** — base language the pin speaks when translating

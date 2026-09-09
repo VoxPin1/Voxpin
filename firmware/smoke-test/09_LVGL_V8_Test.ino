@@ -1,6 +1,7 @@
 #include "wifi_connect.h"
 #include "user_app.h"
 #include "lvgl_port.h"
+#include "ble_companion.h"
 
 void setup()
 {
@@ -18,6 +19,8 @@ void setup()
   } else {
     Serial.println("WiFi failed — using RTC as-is");
   }
+
+  ble_companion_begin();
 
   lvgl_port();
   Serial.println("Home screen ready.");

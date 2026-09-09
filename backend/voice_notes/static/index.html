@@ -200,7 +200,10 @@
       <section class="panel" id="panel-device" role="tabpanel" hidden>
         <div class="panel-head">
           <h2>Device</h2>
-          <p>Connect your VoxPin over Bluetooth. Once paired, this site remembers it.</p>
+          <p>
+            Pair your VoxPin over Bluetooth. This browser keeps your profile and settings, and
+            writes them to the pin when it’s connected.
+          </p>
         </div>
         <div class="device-card" id="deviceCard">
           <div class="device-card-status">
@@ -215,6 +218,19 @@
             <button class="btn ghost" id="btnForgetBt" hidden>Forget device</button>
           </div>
           <p class="device-hint" id="deviceHint"></p>
+        </div>
+        <div class="google-card" id="profileCard" hidden>
+          <h3>Profile</h3>
+          <p class="hint">
+            Saved in this browser. When Bluetooth is live, the same profile is stored on the pin.
+          </p>
+          <label class="hint" for="profileName">Display name</label>
+          <input id="profileName" type="text" maxlength="32" spellcheck="false" placeholder="VoxPin" />
+          <p class="hint" id="profileLanguageMeta"></p>
+          <div class="google-actions">
+            <button class="btn primary" id="saveProfile">Save profile</button>
+          </div>
+          <p class="device-hint" id="profileHint"></p>
         </div>
       </section>
     </main>

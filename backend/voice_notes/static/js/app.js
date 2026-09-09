@@ -3,6 +3,30 @@
   const BT_SESSION_KEY = "voxpin_bt_modal_session";
   // Reserved service UUID for future VoxPin BLE firmware
   const VOXPIN_SERVICE = "a1a2a3a4-b1b2-c1c2-d1d2-e1e2e3e4e5e6";
+  const VOXPIN_PROFILE_CHAR = "a1a2a3a4-b1b2-c1c2-d1d2-e1e2e3e4e5e7";
+  const PROFILE_KEY = "voxpin_profile";
+  const FALLBACK_LANGUAGES = [
+    { code: "en", name: "English", native: "English" },
+    { code: "te", name: "Telugu", native: "తెలుగు" },
+    { code: "es", name: "Spanish", native: "Español" },
+    { code: "fr", name: "French", native: "Français" },
+    { code: "de", name: "German", native: "Deutsch" },
+    { code: "it", name: "Italian", native: "Italiano" },
+    { code: "pt", name: "Portuguese", native: "Português" },
+    { code: "ja", name: "Japanese", native: "日本語" },
+    { code: "ko", name: "Korean", native: "한국어" },
+    { code: "zh-CN", name: "Chinese (Simplified)", native: "简体中文" },
+    { code: "zh-TW", name: "Chinese (Traditional)", native: "繁體中文" },
+    { code: "hi", name: "Hindi", native: "हिन्दी" },
+    { code: "ar", name: "Arabic", native: "العربية" },
+    { code: "ru", name: "Russian", native: "Русский" },
+    { code: "nl", name: "Dutch", native: "Nederlands" },
+    { code: "pl", name: "Polish", native: "Polski" },
+    { code: "sv", name: "Swedish", native: "Svenska" },
+    { code: "tr", name: "Turkish", native: "Türkçe" },
+    { code: "vi", name: "Vietnamese", native: "Tiếng Việt" },
+    { code: "th", name: "Thai", native: "ไทย" },
+  ];
   const STATIC_HOST_NOTE =
     "This public page is the VoxPin UI. Recordings, language, calendar, and Google need the local backend (backend/voice_notes ./run.sh).";
 
@@ -28,7 +52,9 @@
       id: "",
       device: null,
       server: null,
+      profileChar: null,
     },
+    profile: {},
   };
 
   const els = {
@@ -68,6 +94,11 @@
     btModalNote: document.getElementById("btModalNote"),
     btnConnectBt: document.getElementById("btnConnectBt"),
     btnForgetBt: document.getElementById("btnForgetBt"),
+    profileCard: document.getElementById("profileCard"),
+    profileName: document.getElementById("profileName"),
+    profileHint: document.getElementById("profileHint"),
+    profileLanguageMeta: document.getElementById("profileLanguageMeta"),
+    saveProfile: document.getElementById("saveProfile"),
     deviceDot: document.getElementById("deviceDot"),
     deviceCardTitle: document.getElementById("deviceCardTitle"),
     deviceCardMeta: document.getElementById("deviceCardMeta"),
@@ -94,6 +125,94 @@
 
   function clearBtMemory() {
     localStorage.removeItem(BT_STORAGE_KEY);
+  }
+
+  function readProfileStore() {
+    try {
+      return JSON.parse(localStorage.getItem(PROFILE_KEY)) || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function languageName(code) {
+    const list = state.languages.length ? state.languages : FALLBACK_LANGUAGES;
+    return list.find((lang) => lang.code === code)?.name || code || "";
+  }
+
+  function mergeProfile(patch) {
+    state.profile = {
+      name: "VoxPin",
+      language: "es",
+      languageName: "Spanish",
+      ...readProfileStore(),
+      ...patch,
+      updatedAt: new Date().toISOString(),
+    };
+    if (state.bt.id) state.profile.deviceId = state.bt.id;
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(state.profile));
+    if (state.profile.language) state.selectedLang = state.profile.language;
+    if (state.profile.name) state.bt.name = state.profile.name;
+    updateProfileUi();
+    return state.profile;
+  }
+
+  function updateProfileUi() {
+    if (els.profileCard) els.profileCard.hidden = !state.bt.paired;
+    if (els.profileName && document.activeElement !== els.profileName) {
+      els.profileName.value = state.profile.name || state.bt.name || "";
+    }
+    if (els.profileLanguageMeta) {
+      const lang = state.profile.languageName || languageName(state.profile.language);
+      els.profileLanguageMeta.textContent = lang
+        ? `Pin speaks ${lang} for translations.`
+        : "Pick a language in the Language tab.";
+    }
+  }
+
+  async function bindProfileCharacteristic(server) {
+    if (!server) return null;
+    const service = await server.getPrimaryService(VOXPIN_SERVICE);
+    const characteristic = await service.getCharacteristic(VOXPIN_PROFILE_CHAR);
+    state.bt.profileChar = characteristic;
+    return characteristic;
+  }
+
+  async function pullProfileFromDevice() {
+    if (!state.bt.profileChar) return;
+    const value = await state.bt.profileChar.readValue();
+    const text = new TextDecoder().decode(value).replace(/\0/g, "").trim();
+    if (!text) return;
+    const remote = JSON.parse(text);
+    mergeProfile({
+      name: remote.name || state.profile.name,
+      language: remote.language || state.profile.language,
+      languageName: languageName(remote.language || state.selectedLang),
+    });
+    renderLanguages();
+  }
+
+  async function pushProfileToDevice() {
+    if (!state.bt.profileChar) return;
+    const payload = JSON.stringify({
+      name: String(state.profile.name || "VoxPin").slice(0, 32),
+      language: state.selectedLang || state.profile.language || "es",
+    });
+    const bytes = new TextEncoder().encode(payload);
+    if (state.bt.profileChar.writeValueWithResponse) {
+      await state.bt.profileChar.writeValueWithResponse(bytes);
+    } else {
+      await state.bt.profileChar.writeValue(bytes);
+    }
+  }
+
+  async function syncProfileOverBle(server) {
+    try {
+      await bindProfileCharacteristic(server);
+      await pullProfileFromDevice();
+    } catch {
+      // Older firmware can pair without the VoxPin profile service.
+    }
   }
 
   function updateDeviceUi() {
@@ -131,6 +250,7 @@
           : "Web Bluetooth needs Chrome or Edge (HTTPS or localhost).";
       }
     }
+    updateProfileUi();
   }
 
   function updateStatusChip(backend) {
@@ -231,6 +351,7 @@
     device.addEventListener("gattserverdisconnected", () => {
       state.bt.live = false;
       state.bt.server = null;
+      state.bt.profileChar = null;
       updateDeviceUi();
       loadStatus();
     });
@@ -247,6 +368,11 @@
       name: state.bt.name,
       pairedAt: new Date().toISOString(),
     });
+    mergeProfile({ name: state.profile.name || state.bt.name });
+
+    if (live) {
+      await syncProfileOverBle(state.bt.server);
+    }
 
     updateDeviceUi();
     hideBtModal();
@@ -280,17 +406,20 @@
           match.addEventListener("gattserverdisconnected", () => {
             state.bt.live = false;
             state.bt.server = null;
+            state.bt.profileChar = null;
             updateDeviceUi();
             loadStatus();
           });
           if (match.gatt?.connected) {
             state.bt.live = true;
             state.bt.server = match.gatt;
+            await syncProfileOverBle(match.gatt);
           } else if (match.gatt) {
             try {
               const server = await match.gatt.connect();
               state.bt.server = server;
               state.bt.live = !!server.connected;
+              if (state.bt.live) await syncProfileOverBle(server);
             } catch {
               // Stay paired; live link can wait until pin is nearby
             }
@@ -317,8 +446,11 @@
       id: "",
       device: null,
       server: null,
+      profileChar: null,
     };
     clearBtMemory();
+    localStorage.removeItem(PROFILE_KEY);
+    state.profile = {};
     // Allow first-visit popup again only after an explicit forget
     sessionStorage.removeItem(BT_SESSION_KEY);
     updateDeviceUi();
@@ -519,17 +651,27 @@
     els.languageName.textContent =
       state.languages.find((l) => l.code === state.selectedLang)?.name || "—";
     els.languageGrid.innerHTML = langButtons(state.selectedLang);
+    updateProfileUi();
   }
 
   async function loadLanguages() {
     try {
-      const data = await api("/api/languages");
-      state.languages = data.languages || [];
-      state.selectedLang = data.target_language || data.selected || "es";
-      renderLanguages();
+      if (!isPublicStaticHost()) {
+        const data = await api("/api/languages");
+        state.languages = data.languages || FALLBACK_LANGUAGES;
+        state.selectedLang = data.target_language || data.selected || state.selectedLang || "es";
+        renderLanguages();
+        return;
+      }
     } catch (err) {
-      els.languageGrid.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+      if (!isPublicStaticHost()) {
+        els.languageGrid.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+        return;
+      }
     }
+    state.languages = FALLBACK_LANGUAGES;
+    state.selectedLang = state.profile.language || state.selectedLang || "es";
+    renderLanguages();
   }
 
   async function speakGreeting(code) {
@@ -560,13 +702,29 @@
   }
 
   async function setLanguage(code) {
-    const data = await api("/api/settings/language", {
-      method: "PUT",
-      body: JSON.stringify({ code, role: "target" }),
-    });
-    state.selectedLang = data.target_language;
+    const lang = (state.languages.length ? state.languages : FALLBACK_LANGUAGES).find(
+      (item) => item.code === code
+    );
+    if (!isPublicStaticHost()) {
+      const data = await api("/api/settings/language", {
+        method: "PUT",
+        body: JSON.stringify({ code, role: "target" }),
+      });
+      state.selectedLang = data.target_language;
+      mergeProfile({
+        language: code,
+        languageName: lang?.name || data.target_language_name,
+      });
+      await pushProfileToDevice().catch(() => {});
+      renderLanguages();
+      loadStatus();
+      await speakGreeting(code);
+      return;
+    }
+    state.selectedLang = code;
+    mergeProfile({ language: code, languageName: lang?.name || code });
+    await pushProfileToDevice().catch(() => {});
     renderLanguages();
-    loadStatus();
     await speakGreeting(code);
   }
 
@@ -806,6 +964,23 @@
     els.btnForgetBt?.addEventListener("click", () => {
       forgetBluetooth();
     });
+    els.saveProfile?.addEventListener("click", async () => {
+      const name = (els.profileName?.value || "").trim() || "VoxPin";
+      mergeProfile({ name });
+      try {
+        await pushProfileToDevice();
+        if (els.profileHint) {
+          els.profileHint.textContent = state.bt.live
+            ? "Saved on this browser and on the pin."
+            : "Saved on this browser. Reconnect Bluetooth to write it to the pin.";
+        }
+      } catch (err) {
+        if (els.profileHint) {
+          els.profileHint.textContent = err.message || "Could not write to the pin.";
+        }
+      }
+      updateDeviceUi();
+    });
 
     els.saveGoogleCreds?.addEventListener("click", async () => {
       const raw = (els.googleCreds?.value || "").trim();
@@ -868,6 +1043,12 @@
   }
 
   async function boot() {
+    const stored = readProfileStore();
+    if (Object.keys(stored).length) {
+      state.profile = stored;
+      if (stored.language) state.selectedLang = stored.language;
+      if (stored.name) state.bt.name = stored.name;
+    }
     bindEvents();
     animateWaves();
     const params = new URLSearchParams(location.search);
