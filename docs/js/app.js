@@ -7,7 +7,11 @@
   const PROFILE_KEY = "voxpin_profile";
   const GOOGLE_CLIENT_KEY = "voxpin_google_client_id";
   const GOOGLE_USER_KEY = "voxpin_google_user";
-  const GOOGLE_CAL_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+  const GOOGLE_DATA_SCOPES = [
+    "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/documents.readonly",
+  ].join(" ");
+  const DEFAULT_DOC_ID = "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8";
   const FALLBACK_LANGUAGES = [
     { code: "en", name: "English", native: "English" },
     { code: "te", name: "Telugu", native: "తెలుగు" },
@@ -285,7 +289,7 @@
     if (window.google.accounts.oauth2) {
       state.google.tokenClient = google.accounts.oauth2.initTokenClient({
         client_id: clientId,
-        scope: GOOGLE_CAL_SCOPE,
+        scope: GOOGLE_DATA_SCOPES,
         callback: (resp) => {
           if (resp.error) {
             if (els.googleSignInHint) els.googleSignInHint.textContent = resp.error;
@@ -293,9 +297,10 @@
           }
           state.google.accessToken = resp.access_token || "";
           if (els.googleSignInHint) {
-            els.googleSignInHint.textContent = "Calendar connected in this browser.";
+            els.googleSignInHint.textContent = "Google Drive notes and Calendar are connected in this browser.";
           }
           loadCalendar();
+          loadRecordings();
           loadGoogleStatus();
         },
       });
@@ -329,6 +334,7 @@
     if (els.googleSignInHint) els.googleSignInHint.textContent = "Signed out of this browser.";
     loadGoogleStatus();
     loadCalendar();
+    loadRecordings();
   }
 
   function requestGoogleCalendar() {
@@ -372,8 +378,8 @@
       if (!state.selectedDate) state.selectedDate = dayKey(new Date());
       renderCalendar();
       els.calNote.textContent = state.google.user
-        ? "Signed in. Click Connect Calendar on the Account tab to load events here — no VoxPin server needed."
-        : "Sign in with Google on the Account tab to load calendar events here. No VoxPin server required.";
+        ? "Signed in. Click Load notes & calendar on the Account tab to show Google Calendar here."
+        : "Sign in with Google on the Account tab to show your calendar here.";
       return true;
     }
     const start = new Date(state.viewYear, state.viewMonth, 1);
@@ -392,7 +398,7 @@
     if (res.status === 401) {
       state.google.accessToken = "";
       state.calendarConnected = false;
-      els.calNote.textContent = "Calendar access expired. Click Connect Calendar again.";
+      els.calNote.textContent = "Google access expired. Click Load notes & calendar again.";
       renderCalendar();
       return true;
     }
@@ -403,8 +409,100 @@
     state.calendarConnected = true;
     state.events = (data.items || []).map(mapGoogleEvent);
     if (!state.selectedDate) state.selectedDate = dayKey(new Date());
+    els.calNote.textContent = "Showing your Google Calendar.";
     renderCalendar();
     return true;
+  }
+
+  function inferNoteKind(text) {
+    const lower = String(text || "").toLowerCase();
+    if (lower.startsWith("remind") || lower.startsWith("task")) return "task";
+    if (lower.startsWith("translate")) return "translate";
+    return "note";
+  }
+
+  function parseDayStamp(title) {
+    if (!title) return "";
+    const stamp = Date.parse(title);
+    return Number.isNaN(stamp) ? "" : new Date(stamp).toISOString();
+  }
+
+  function paragraphText(paragraph) {
+    return (paragraph.elements || [])
+      .map((el) => el.textRun?.content || "")
+      .join("")
+      .replace(/\s+$/g, "");
+  }
+
+  function walkDocContent(content, notes, ctx) {
+    for (const el of content || []) {
+      if (el.paragraph) {
+        const text = paragraphText(el.paragraph).trim();
+        if (!text) continue;
+        const style = el.paragraph.paragraphStyle?.namedStyleType || "";
+        if (style === "HEADING_1" || style === "HEADING_2" || style === "TITLE") {
+          ctx.day = text;
+          continue;
+        }
+        notes.push({
+          id: `gdoc-${notes.length}-${text.slice(0, 24)}`,
+          kind: inferNoteKind(text),
+          text,
+          created_at: parseDayStamp(ctx.day),
+          source: "google-doc",
+        });
+      }
+      if (el.table) {
+        for (const row of el.table.tableRows || []) {
+          for (const cell of row.tableCells || []) {
+            walkDocContent(cell.content, notes, ctx);
+          }
+        }
+      }
+    }
+  }
+
+  function notesFromGoogleDoc(doc) {
+    const notes = [];
+    const ctx = { day: "" };
+    walkDocContent(doc.body?.content, notes, ctx);
+    for (const tab of doc.tabs || []) {
+      const tabCtx = { day: tab.tabProperties?.title || ctx.day };
+      walkDocContent(tab.documentTab?.body?.content, notes, tabCtx);
+    }
+    return notes
+      .filter((note) => note.text && note.text !== "VoxPin Apps Script test — connection OK")
+      .reverse();
+  }
+
+  async function googleGet(url) {
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${state.google.accessToken}` },
+    });
+    if (res.status === 401) {
+      state.google.accessToken = "";
+      throw new Error("Google access expired. Click Load notes & calendar again.");
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Google request failed (${res.status})`);
+    }
+    return res.json();
+  }
+
+  async function loadNotesFromGoogleDoc() {
+    const docId = DEFAULT_DOC_ID;
+    if (els.googleDocLink) {
+      els.googleDocLink.href = `https://docs.google.com/document/d/${docId}/edit`;
+    }
+    const doc = await googleGet(
+      `https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}?includeTabsContent=true`
+    );
+    state.recordings = notesFromGoogleDoc(doc);
+    renderRecordings();
+    if (els.footerMeta && isPublicStaticHost()) {
+      els.footerMeta.textContent = `${state.recordings.length} notes from Google Drive`;
+    }
   }
 
   function updateProfileUi() {
@@ -737,13 +835,18 @@
         ? "Web client ID saved — click Sign in with Google"
         : "Paste a Web client ID, then sign in";
     const cal = state.google.accessToken ? "Connected in this browser" : "Not connected yet";
+    const drive = state.google.accessToken ? "Google Doc notes ready to load" : "Not connected yet";
 
     if (isPublicStaticHost()) {
       els.googleStatus.innerHTML = `
         <ul class="google-flags">
           <li><strong>Website account:</strong> ${escapeHtml(web)}</li>
-          <li><strong>Calendar (this browser):</strong> ${escapeHtml(cal)}</li>
+          <li><strong>Google Drive notes:</strong> ${escapeHtml(drive)}</li>
+          <li><strong>Calendar:</strong> ${escapeHtml(cal)}</li>
         </ul>`;
+      if (els.googleDocLink) {
+        els.googleDocLink.href = `https://docs.google.com/document/d/${DEFAULT_DOC_ID}/edit`;
+      }
       return;
     }
 
@@ -760,6 +863,7 @@
       els.googleStatus.innerHTML = `
         <ul class="google-flags">
           <li><strong>Website account:</strong> ${escapeHtml(web)}</li>
+          <li><strong>Google Drive notes:</strong> ${escapeHtml(drive)}</li>
           <li><strong>Calendar (this browser):</strong> ${escapeHtml(cal)}</li>
           <li><strong>Docs (Apps Script):</strong> ${escapeHtml(apps)} · ${escapeHtml(docs)}</li>
           <li><strong>Pin backend Calendar:</strong> ${escapeHtml(oauth)} · ${escapeHtml(flaskCal)}</li>
@@ -857,8 +961,11 @@
       (r) => state.filter === "all" || r.kind === state.filter
     );
     if (!items.length) {
-      els.recordingList.innerHTML =
-        '<p class="empty">No recordings yet. Click the pin button to start, click again to send — or hold to talk. Try “take notes…”, “translate this…”, or “remind me…”.</p>';
+      els.recordingList.innerHTML = state.google.accessToken
+        ? '<p class="empty">No notes in your Google Doc yet. Speak a note on the pin (Apps Script) or add a line in the Doc.</p>'
+        : state.google.user
+          ? '<p class="empty">Signed in. Open Account and click Load notes &amp; calendar to show your Google Doc and Calendar here.</p>'
+          : '<p class="empty">No recordings yet. Click the pin button to start, click again to send — or hold to talk. Try “take notes…”, “translate this…”, or “remind me…”.</p>';
       return;
     }
     els.recordingList.innerHTML = items
@@ -880,7 +987,11 @@
             </div>
             <div style="display:grid;justify-items:end;gap:0.4rem">
               <time datetime="${escapeAttr(r.created_at || "")}">${formatWhen(r.created_at)}</time>
-              <button class="delete-btn" data-delete="${escapeAttr(r.id)}" aria-label="Delete recording">Delete</button>
+              ${
+                r.source === "google-doc"
+                  ? ""
+                  : `<button class="delete-btn" data-delete="${escapeAttr(r.id)}" aria-label="Delete recording">Delete</button>`
+              }
             </div>
           </article>`;
       })
@@ -900,13 +1011,32 @@
   }
 
   async function loadRecordings() {
-    try {
-      const data = await api("/api/recordings");
-      state.recordings = data.recordings || [];
-      renderRecordings();
-    } catch (err) {
-      els.recordingList.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+    if (state.google.accessToken) {
+      try {
+        await loadNotesFromGoogleDoc();
+        return;
+      } catch (err) {
+        if (isPublicStaticHost()) {
+          els.recordingList.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+          return;
+        }
+      }
     }
+    if (!isPublicStaticHost()) {
+      try {
+        const data = await api("/api/recordings");
+        state.recordings = data.recordings || [];
+        renderRecordings();
+        return;
+      } catch (err) {
+        if (!state.google.user) {
+          els.recordingList.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+          return;
+        }
+      }
+    }
+    state.recordings = [];
+    renderRecordings();
   }
 
   function langButtons(selectedCode) {

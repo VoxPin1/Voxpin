@@ -13,7 +13,7 @@ cd backend/voice_notes
 
 Then open [http://127.0.0.1:8765/](http://127.0.0.1:8765/).
 
-A public preview of the companion UI is on GitHub Pages: [https://voxpin1.github.io/Voxpin/](https://voxpin1.github.io/Voxpin/). Pair the pin over Bluetooth (Chrome/Edge) to keep a profile and language settings in the browser and on the device. Sign in with Google on the Account tab — that does **not** need a VoxPin server. Voice recordings from the pin still need this local server (or a hosted one) because GitHub Pages cannot receive uploads.
+A public preview of the companion UI is on GitHub Pages: [https://voxpin1.github.io/Voxpin/](https://voxpin1.github.io/Voxpin/). Pair the pin over Bluetooth (Chrome/Edge) to keep a profile and language settings in the browser and on the device. Sign in with Google on the Account tab, then click **Load notes & calendar**. The site displays your Google Doc (Drive) and Calendar — no VoxPin server required for that. Voice capture from the pin can still write into that same Doc via Apps Script.
 
 - **Recordings** — notes, translations, and tasks from the pin
 - **Language** — base language the pin speaks when translating

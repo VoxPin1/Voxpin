@@ -89,7 +89,7 @@
       <section class="panel is-active" id="panel-recordings" role="tabpanel">
         <div class="panel-head">
           <h2>Recordings</h2>
-          <p>Notes, translations, and tasks captured from your VoxPin.</p>
+          <p>Notes from your Google Doc after you sign in, plus anything captured from the pin.</p>
         </div>
         <div class="filter-row">
           <button class="chip is-active" data-filter="all">All</button>
@@ -150,9 +150,10 @@
         <div class="panel-head">
           <h2>Sign in</h2>
           <p>
-            Sign in with Google on this website. You do not need a VoxPin server for your account —
-            Google handles the login. A server is only required if you want the pin to upload
-            voice notes while this page is closed.
+            Sign in with Google, then load notes from your Google Doc (Drive) and events from
+            Calendar. The site only displays that data — Google stores it. You do not need a
+            VoxPin server for this. A server is only needed if the pin should upload while this
+            page is closed (Apps Script can do that into the same Doc).
           </p>
         </div>
         <div class="google-status" id="googleStatus">
@@ -164,8 +165,9 @@
             In Google Cloud → APIs &amp; Services → Credentials, create an OAuth client of type
             <strong>Web application</strong>. Add these Authorized JavaScript origins:
             <code>https://voxpin1.github.io</code> and <code>http://127.0.0.1:8765</code>.
-            Then paste the Client ID below. For calendar, also enable the
-            <strong>Google Calendar API</strong> on that same Cloud project.
+            Then paste the Client ID below. Also enable the
+            <strong>Google Calendar API</strong> and <strong>Google Docs API</strong> on that
+            Cloud project.
           </p>
           <label class="hint" for="googleClientId">Web client ID</label>
           <input
@@ -177,7 +179,7 @@
           <div class="google-actions">
             <button class="btn primary" id="saveGoogleClientId">Save client ID</button>
             <button class="btn ghost" id="googleSignOut" hidden>Sign out</button>
-            <button class="btn ghost" id="googleConnectCalendar">Connect Calendar</button>
+            <button class="btn ghost" id="googleConnectCalendar">Load notes &amp; calendar</button>
           </div>
           <div id="googleSignInButton" class="gsi-slot"></div>
           <p class="device-hint" id="googleSignInHint"></p>
