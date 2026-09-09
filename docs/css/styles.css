@@ -163,8 +163,55 @@ a {
   background: var(--fog);
 }
 
-.device-chip {
+.topbar-end {
   justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.account-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--mist);
+  font-size: 0.85rem;
+  border: 1px solid var(--line);
+  background: rgba(21, 28, 40, 0.75);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem 0.35rem 0.45rem;
+  cursor: pointer;
+  max-width: 14rem;
+}
+
+.account-chip:hover {
+  border-color: rgba(62, 201, 176, 0.35);
+  color: var(--fog);
+}
+
+.account-chip.is-live {
+  color: var(--paper);
+}
+
+.account-chip img {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--ink-soft);
+}
+
+.account-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gsi-slot {
+  min-height: 2.5rem;
+}
+
+.device-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -952,6 +999,7 @@ main {
     overflow-x: auto;
   }
 
+  .topbar-end,
   .device-chip {
     justify-self: start;
   }

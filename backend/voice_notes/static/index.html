@@ -39,16 +39,22 @@
           Calendar
         </button>
         <button class="tab" role="tab" aria-selected="false" data-tab="google">
-          Google
+          Account
         </button>
         <button class="tab" role="tab" aria-selected="false" data-tab="device">
           Device
         </button>
       </nav>
-      <button type="button" class="device-chip" id="deviceStatus" title="Device connection">
-        <span class="pulse"></span>
-        <span id="deviceStatusText">Checking pin…</span>
-      </button>
+      <div class="topbar-end">
+        <button type="button" class="account-chip" id="accountStatus" title="Google account">
+          <img id="accountAvatar" alt="" hidden />
+          <span id="accountStatusText">Sign in</span>
+        </button>
+        <button type="button" class="device-chip" id="deviceStatus" title="Device connection">
+          <span class="pulse"></span>
+          <span id="deviceStatusText">Checking pin…</span>
+        </button>
+      </div>
     </header>
 
     <main id="top">
@@ -141,17 +147,42 @@
 
       <section class="panel" id="panel-google" role="tabpanel" hidden>
         <div class="panel-head">
-          <h2>Google</h2>
+          <h2>Sign in</h2>
           <p>
-            Notes used Apps Script before. That local webhook config was lost on the fresh clone —
-            paste it back below. Calendar still needs Google sign-in separately.
+            Sign in with Google on this website. You do not need a VoxPin server for your account —
+            Google handles the login. A server is only required if you want the pin to upload
+            voice notes while this page is closed.
           </p>
         </div>
         <div class="google-status" id="googleStatus">
           <p class="empty">Checking Google connection…</p>
         </div>
         <div class="google-card">
-          <h3>1. Restore Apps Script (Docs notes)</h3>
+          <h3>Sign in with Google</h3>
+          <p class="hint">
+            In Google Cloud → APIs &amp; Services → Credentials, create an OAuth client of type
+            <strong>Web application</strong>. Add these Authorized JavaScript origins:
+            <code>https://voxpin1.github.io</code> and <code>http://127.0.0.1:8765</code>.
+            Then paste the Client ID below. For calendar, also enable the
+            <strong>Google Calendar API</strong> on that same Cloud project.
+          </p>
+          <label class="hint" for="googleClientId">Web client ID</label>
+          <input
+            id="googleClientId"
+            type="text"
+            spellcheck="false"
+            placeholder="123456789-abc.apps.googleusercontent.com"
+          />
+          <div class="google-actions">
+            <button class="btn primary" id="saveGoogleClientId">Save client ID</button>
+            <button class="btn ghost" id="googleSignOut" hidden>Sign out</button>
+            <button class="btn ghost" id="googleConnectCalendar">Connect Calendar</button>
+          </div>
+          <div id="googleSignInButton" class="gsi-slot"></div>
+          <p class="device-hint" id="googleSignInHint"></p>
+        </div>
+        <div class="google-card">
+          <h3>This computer only — Apps Script (Docs notes)</h3>
           <p class="hint">
             In Google Apps Script → Deploy → Manage deployments → copy the Web app URL
             (<code>.../macros/s/.../exec</code>). Use the same secret as in your script’s
@@ -173,10 +204,11 @@
           <p class="device-hint" id="appsScriptHint"></p>
         </div>
         <div class="google-card">
-          <h3>2. OAuth for Calendar</h3>
+          <h3>This computer only — Desktop OAuth for the pin</h3>
           <p class="hint">
-            Required for reminders and next-event on the pin (separate from Apps Script).
-            Create a Desktop OAuth client in Google Cloud, paste the JSON, Save, then Sign in.
+            Needed so the pin can write reminders while this website is closed. Create a
+            <strong>Desktop</strong> OAuth client, paste the JSON, Save, then Sign in. This is
+            separate from Sign in with Google above.
           </p>
           <textarea
             id="googleCreds"
@@ -186,7 +218,7 @@
           ></textarea>
           <div class="google-actions">
             <button class="btn primary" id="saveGoogleCreds">Save credentials</button>
-            <a class="btn ghost is-disabled" id="connectGoogle" aria-disabled="true">Sign in with Google</a>
+            <a class="btn ghost is-disabled" id="connectGoogle" aria-disabled="true">Sign in for pin backend</a>
           </div>
           <p class="device-hint" id="googleCredsHint"></p>
           <p class="device-hint" id="googleConnectHint"></p>
@@ -251,6 +283,7 @@
         </p>
         <div class="modal-actions">
           <button class="btn primary" id="btModalConnect">Connect with Bluetooth</button>
+          <button class="btn ghost" id="btModalGoogle">Sign in with Google</button>
           <button class="btn ghost" id="btModalLater">Not now</button>
         </div>
         <p class="modal-note" id="btModalNote"></p>
@@ -262,6 +295,7 @@
       <span id="footerMeta"></span>
     </footer>
 
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="/static/js/app.js"></script>
   </body>
 </html>
