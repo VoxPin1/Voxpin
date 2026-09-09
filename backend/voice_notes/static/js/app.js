@@ -5,9 +5,13 @@
   const VOXPIN_SERVICE = "a1a2a3a4-b1b2-c1c2-d1d2-e1e2e3e4e5e6";
   const VOXPIN_PROFILE_CHAR = "a1a2a3a4-b1b2-c1c2-d1d2-e1e2e3e4e5e7";
   const PROFILE_KEY = "voxpin_profile";
-  const GOOGLE_CLIENT_KEY = "voxpin_google_client_id";
   const GOOGLE_USER_KEY = "voxpin_google_user";
+  const GOOGLE_WEB_CLIENT_ID =
+    "152660794384-to4p6nc5ggr13al7itdn32k7b0q9cv03.apps.googleusercontent.com";
   const GOOGLE_DATA_SCOPES = [
+    "openid",
+    "email",
+    "profile",
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/documents.readonly",
   ].join(" ");
@@ -90,17 +94,10 @@
     dayEvents: document.getElementById("dayEvents"),
     calNote: document.getElementById("calNote"),
     googleStatus: document.getElementById("googleStatus"),
-    googleCreds: document.getElementById("googleCreds"),
-    googleCredsHint: document.getElementById("googleCredsHint"),
-    saveGoogleCreds: document.getElementById("saveGoogleCreds"),
     googleDocLink: document.getElementById("googleDocLink"),
-    googleConnectHint: document.getElementById("googleConnectHint"),
-    googleClientId: document.getElementById("googleClientId"),
-    saveGoogleClientId: document.getElementById("saveGoogleClientId"),
-    googleSignInButton: document.getElementById("googleSignInButton"),
+    googleSignInBtn: document.getElementById("googleSignInBtn"),
     googleSignInHint: document.getElementById("googleSignInHint"),
     googleSignOut: document.getElementById("googleSignOut"),
-    googleConnectCalendar: document.getElementById("googleConnectCalendar"),
     accountStatus: document.getElementById("accountStatus"),
     accountStatusText: document.getElementById("accountStatusText"),
     accountAvatar: document.getElementById("accountAvatar"),
@@ -196,11 +193,11 @@
   }
 
   function waitForGoogleIdentity(timeoutMs = 8000) {
-    if (window.google?.accounts?.id) return Promise.resolve();
+    if (window.google?.accounts?.oauth2) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const started = Date.now();
       const timer = setInterval(() => {
-        if (window.google?.accounts?.id) {
+        if (window.google?.accounts?.oauth2) {
           clearInterval(timer);
           resolve();
         } else if (Date.now() - started > timeoutMs) {
@@ -227,9 +224,7 @@
     }
     els.accountStatus?.classList.toggle("is-live", !!user);
     if (els.googleSignOut) els.googleSignOut.hidden = !user;
-    if (els.googleClientId && document.activeElement !== els.googleClientId) {
-      els.googleClientId.value = state.google.clientId || "";
-    }
+    if (els.googleSignInBtn) els.googleSignInBtn.hidden = !!user;
   }
 
   function persistGoogleUser(user) {
@@ -266,56 +261,55 @@
 
   function setupGoogleSignIn() {
     const clientId = state.google.clientId;
-    if (!clientId || !window.google?.accounts?.id) {
-      if (els.googleSignInButton) els.googleSignInButton.innerHTML = "";
-      return;
-    }
-    google.accounts.id.initialize({
+    if (!clientId || !window.google?.accounts?.oauth2) return;
+    state.google.tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: clientId,
-      callback: onGoogleCredential,
-      auto_select: false,
-      ux_mode: "popup",
+      scope: GOOGLE_DATA_SCOPES,
+      callback: async (resp) => {
+        if (resp.error) {
+          if (els.googleSignInHint) els.googleSignInHint.textContent = resp.error;
+          return;
+        }
+        state.google.accessToken = resp.access_token || "";
+        try {
+          const profile = await googleGet("https://www.googleapis.com/oauth2/v3/userinfo");
+          persistGoogleUser({
+            sub: profile.sub,
+            email: profile.email || "",
+            name: profile.name || profile.email || "Google user",
+            picture: profile.picture || "",
+          });
+          mergeProfile({
+            name:
+              state.profile.name && state.profile.name !== "VoxPin"
+                ? state.profile.name
+                : profile.name || state.profile.name,
+            googleEmail: profile.email,
+            googleSub: profile.sub,
+          });
+        } catch {
+          persistGoogleUser(state.google.user || { name: "Google user", email: "" });
+        }
+        if (els.googleSignInHint) {
+          els.googleSignInHint.textContent = "Connected. Loading notes and calendar…";
+        }
+        hideBtModal({ forSession: true });
+        await loadCalendar();
+        await loadRecordings();
+        loadGoogleStatus();
+        if (els.googleSignInHint) {
+          els.googleSignInHint.textContent = "Signed in with Google.";
+        }
+      },
     });
-    if (els.googleSignInButton) {
-      els.googleSignInButton.innerHTML = "";
-      google.accounts.id.renderButton(els.googleSignInButton, {
-        theme: "filled_black",
-        size: "large",
-        text: "signin_with",
-        shape: "pill",
-        width: 280,
-      });
-    }
-    if (window.google.accounts.oauth2) {
-      state.google.tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: GOOGLE_DATA_SCOPES,
-        callback: (resp) => {
-          if (resp.error) {
-            if (els.googleSignInHint) els.googleSignInHint.textContent = resp.error;
-            return;
-          }
-          state.google.accessToken = resp.access_token || "";
-          if (els.googleSignInHint) {
-            els.googleSignInHint.textContent = "Google Drive notes and Calendar are connected in this browser.";
-          }
-          loadCalendar();
-          loadRecordings();
-          loadGoogleStatus();
-        },
-      });
-    }
   }
 
   async function initGoogleSignIn() {
-    state.google.clientId = localStorage.getItem(GOOGLE_CLIENT_KEY) || "";
+    state.google.clientId = GOOGLE_WEB_CLIENT_ID;
     persistGoogleUser(readGoogleUser());
     try {
       await waitForGoogleIdentity();
       setupGoogleSignIn();
-      if (els.googleSignInHint && !state.google.clientId) {
-        els.googleSignInHint.textContent = "Paste a Web client ID to show the Google button.";
-      }
     } catch (err) {
       if (els.googleSignInHint) els.googleSignInHint.textContent = err.message;
     }
@@ -338,21 +332,16 @@
   }
 
   function requestGoogleCalendar() {
-    if (!state.google.clientId) {
-      if (els.googleSignInHint) {
-        els.googleSignInHint.textContent = "Save a Web client ID first.";
-      }
-      return;
-    }
     if (!state.google.tokenClient) {
       setupGoogleSignIn();
     }
     if (!state.google.tokenClient) {
       if (els.googleSignInHint) {
-        els.googleSignInHint.textContent = "Google sign-in is still loading. Try again in a moment.";
+        els.googleSignInHint.textContent = "Google is still loading. Try again in a moment.";
       }
       return;
     }
+    if (els.googleSignInHint) els.googleSignInHint.textContent = "Choose your Google account…";
     state.google.tokenClient.requestAccessToken({ prompt: state.google.accessToken ? "" : "consent" });
   }
 
@@ -884,13 +873,9 @@
     if (!els.googleStatus) return;
     updateAccountUi();
     const user = state.google.user;
-    const web = user
-      ? `Signed in as ${user.email || user.name}`
-      : state.google.clientId
-        ? "Web client ID saved — click Sign in with Google"
-        : "Paste a Web client ID, then sign in";
-    const cal = state.google.accessToken ? "Connected in this browser" : "Not connected yet";
-    const drive = state.google.accessToken ? "Google Doc notes ready to load" : "Not connected yet";
+    const web = user ? `Signed in as ${user.email || user.name}` : "Not signed in";
+    const cal = state.google.accessToken ? "Connected" : "Not connected";
+    const drive = state.google.accessToken ? "Connected" : "Not connected";
 
     if (isPublicStaticHost()) {
       els.googleStatus.innerHTML = `
@@ -1429,35 +1414,19 @@
       activateTab("device", { scroll: true });
     });
     els.accountStatus?.addEventListener("click", () => {
-      activateTab("google", { scroll: true });
-    });
-    els.saveGoogleClientId?.addEventListener("click", async () => {
-      const clientId = (els.googleClientId?.value || "").trim();
-      if (!clientId || !clientId.includes("apps.googleusercontent.com")) {
-        if (els.googleSignInHint) {
-          els.googleSignInHint.textContent =
-            "That doesn’t look like a Web client ID (.apps.googleusercontent.com).";
-        }
+      if (state.google.user) {
+        activateTab("google", { scroll: true });
         return;
       }
-      localStorage.setItem(GOOGLE_CLIENT_KEY, clientId);
-      state.google.clientId = clientId;
-      try {
-        await waitForGoogleIdentity();
-        setupGoogleSignIn();
-        if (els.googleSignInHint) {
-          els.googleSignInHint.textContent = "Client ID saved. Click Sign in with Google.";
-        }
-      } catch (err) {
-        if (els.googleSignInHint) els.googleSignInHint.textContent = err.message;
-      }
-      loadGoogleStatus();
+      activateTab("google", { scroll: true });
+      requestGoogleCalendar();
     });
+    els.googleSignInBtn?.addEventListener("click", () => requestGoogleCalendar());
     els.googleSignOut?.addEventListener("click", () => signOutGoogle());
-    els.googleConnectCalendar?.addEventListener("click", () => requestGoogleCalendar());
     els.btModalGoogle?.addEventListener("click", () => {
       hideBtModal({ forSession: true });
       activateTab("google", { scroll: true });
+      requestGoogleCalendar();
     });
 
     async function handleConnectClick(noteEl) {

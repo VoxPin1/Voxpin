@@ -148,86 +148,26 @@
 
       <section class="panel" id="panel-google" role="tabpanel" hidden>
         <div class="panel-head">
-          <h2>Sign in</h2>
-          <p>
-            Sign in with Google, then load notes from your Google Doc (Drive) and events from
-            Calendar. The site only displays that data — Google stores it. You do not need a
-            VoxPin server for this. A server is only needed if the pin should upload while this
-            page is closed (Apps Script can do that into the same Doc).
-          </p>
+          <h2>Account</h2>
+          <p>Sign in with Google to see your notes and calendar.</p>
         </div>
         <div class="google-status" id="googleStatus">
           <p class="empty">Checking Google connection…</p>
         </div>
-        <div class="google-card">
-          <h3>Sign in with Google</h3>
-          <p class="hint">
-            In Google Cloud → APIs &amp; Services → Credentials, create an OAuth client of type
-            <strong>Web application</strong>. Add these Authorized JavaScript origins:
-            <code>https://voxpin1.github.io</code> and <code>http://127.0.0.1:8765</code>.
-            Then paste the Client ID below. Also enable the
-            <strong>Google Calendar API</strong> and <strong>Google Docs API</strong> on that
-            Cloud project.
-          </p>
-          <label class="hint" for="googleClientId">Web client ID</label>
-          <input
-            id="googleClientId"
-            type="text"
-            spellcheck="false"
-            placeholder="123456789-abc.apps.googleusercontent.com"
-          />
-          <div class="google-actions">
-            <button class="btn primary" id="saveGoogleClientId">Save client ID</button>
-            <button class="btn ghost" id="googleSignOut" hidden>Sign out</button>
-            <button class="btn ghost" id="googleConnectCalendar">Load notes &amp; calendar</button>
-          </div>
-          <div id="googleSignInButton" class="gsi-slot"></div>
+        <div class="google-card google-signin-card">
+          <button type="button" class="google-signin-btn" id="googleSignInBtn">
+            <svg viewBox="0 0 48 48" aria-hidden="true">
+              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            </svg>
+            Sign in with Google
+          </button>
+          <button type="button" class="btn ghost" id="googleSignOut" hidden>Sign out</button>
           <p class="device-hint" id="googleSignInHint"></p>
-        </div>
-        <div class="google-card">
-          <h3>This computer only — Apps Script (Docs notes)</h3>
           <p class="hint">
-            In Google Apps Script → Deploy → Manage deployments → copy the Web app URL
-            (<code>.../macros/s/.../exec</code>). Use the same secret as in your script’s
-            <code>SECRET</code> constant. Doc id in the example is already set in the app.
-          </p>
-          <label class="hint" for="appsScriptUrl">Web app URL</label>
-          <input
-            id="appsScriptUrl"
-            type="url"
-            spellcheck="false"
-            placeholder="https://script.google.com/macros/s/…/exec"
-          />
-          <label class="hint" for="appsScriptSecret">Secret</label>
-          <input id="appsScriptSecret" type="text" spellcheck="false" placeholder="same as SECRET in Code.gs" />
-          <div class="google-actions">
-            <button class="btn primary" id="saveAppsScript">Save Apps Script</button>
-            <button class="btn ghost" id="testAppsScript">Send test note</button>
-          </div>
-          <p class="device-hint" id="appsScriptHint"></p>
-        </div>
-        <div class="google-card">
-          <h3>This computer only — Desktop OAuth for the pin</h3>
-          <p class="hint">
-            Needed so the pin can write reminders while this website is closed. Create a
-            <strong>Desktop</strong> OAuth client, paste the JSON, Save, then Sign in. This is
-            separate from Sign in with Google above.
-          </p>
-          <textarea
-            id="googleCreds"
-            rows="6"
-            spellcheck="false"
-            placeholder='{ "installed": { "client_id": "...", ... } }'
-          ></textarea>
-          <div class="google-actions">
-            <button class="btn primary" id="saveGoogleCreds">Save credentials</button>
-            <a class="btn ghost is-disabled" id="connectGoogle" aria-disabled="true">Sign in for pin backend</a>
-          </div>
-          <p class="device-hint" id="googleCredsHint"></p>
-          <p class="device-hint" id="googleConnectHint"></p>
-          <p class="hint">
-            Target Doc:
-            <a id="googleDocLink" href="#" target="_blank" rel="noopener">open Doc</a>
+            <a id="googleDocLink" href="#" target="_blank" rel="noopener">Open notes in Drive</a>
           </p>
         </div>
       </section>
