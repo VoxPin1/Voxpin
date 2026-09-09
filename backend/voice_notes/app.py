@@ -39,6 +39,28 @@ GTTS_LANG = {
     "zh-TW": "zh-TW",
 }
 
+# macOS `say` voices (offline, much faster than gTTS)
+SAY_VOICES = {
+    "en": "Samantha",
+    "es": "Paulina",
+    "fr": "Thomas",
+    "de": "Anna",
+    "it": "Alice",
+    "pt": "Luciana",
+    "ja": "Kyoko",
+    "ko": "Yuna",
+    "zh-CN": "Tingting",
+    "zh-TW": "Meijia",
+    "hi": "Lekha",
+    "ar": "Maged",
+    "ru": "Milena",
+    "nl": "Xander",
+    "pl": "Zosia",
+    "sv": "Alva",
+    "tr": "Yelda",
+    "th": "Kanya",
+}
+
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="/static")
 
 
@@ -389,7 +411,9 @@ NOTE_PREFIX = re.compile(
 )
 TRANSLATE_PREFIX = re.compile(
     r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?"
-    r"(?:translate(?:\s+this|\s+that)?(?:\s+to\s+\w+)?|say\s+(?:this\s+)?in(?:\s+\w+)?)\b"
+    r"(?:translate(?:\s+this|\s+that)?(?:\s+to\s+\w+)?|"
+    r"say\s+(?:this\s+)?in(?:\s+\w+)?|"
+    r"translation)\b"
     r"[\s,.:;!\-]*",
     re.IGNORECASE,
 )
@@ -403,67 +427,127 @@ IN_DURATION = re.compile(
     r"\bin\s+(?:an?\s+)?(\d+)?\s*(minutes?|mins?|hours?|hrs?)\b",
     re.IGNORECASE,
 )
+# "5 pm", "5:00 p.m.", "at 5pm" — am/pm required so bare numbers aren't times
+CLOCK_TIME = re.compile(
+    r"\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m\.?",
+    re.IGNORECASE,
+)
+# "at 5" / "at 17:30" without am/pm
 AT_TIME = re.compile(
-    r"\bat\s+(\d{1,2})(?::(\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?\b",
+    r"\bat\s+(\d{1,2})(?::(\d{2}))?\b",
     re.IGNORECASE,
 )
 AT_NOON = re.compile(r"\bat\s+noon\b", re.IGNORECASE)
 AT_MIDNIGHT = re.compile(r"\bat\s+midnight\b", re.IGNORECASE)
 TOMORROW = re.compile(r"\btomorrow\b", re.IGNORECASE)
+TODAY = re.compile(r"\btoday\b", re.IGNORECASE)
 TONIGHT = re.compile(r"\btonight\b", re.IGNORECASE)
+WORD_HOUR = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+}
+WORD_CLOCK = re.compile(
+    r"\b(?:at\s+)?(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+    r"\s*([ap])\.?\s*m\.?",
+    re.IGNORECASE,
+)
 
 
-def _soonest_clock(now: datetime, hours: list[int], minute: int, tomorrow: bool) -> datetime:
+def _soonest_clock(
+    now: datetime, hours: list[int], minute: int, day: str = "soonest"
+) -> datetime:
+    """day: 'today' | 'tomorrow' | 'soonest' (next matching time within a few days)."""
     start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    if tomorrow:
+    if day == "tomorrow":
         start += timedelta(days=1)
-    for day_off in range(0, 3):
-        day = start + timedelta(days=day_off)
+        offsets = [0]
+    elif day == "today":
+        offsets = [0]
+    else:
+        offsets = [0, 1, 2]
+
+    for day_off in offsets:
+        day_stamp = start + timedelta(days=day_off)
         candidates = []
         for hour in hours:
-            stamp = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            stamp = day_stamp.replace(hour=hour, minute=minute, second=0, microsecond=0)
             if stamp > now:
                 candidates.append(stamp)
         if candidates:
             return min(candidates)
-        if tomorrow:
-            break
+
+    # Explicit "today" but time already passed → same clock tomorrow
+    if day == "today":
+        return _soonest_clock(now, hours, minute, day="tomorrow")
     return now + timedelta(hours=1)
+
+
+def _hours_from_clock(hour: int, ampm: str) -> list[int]:
+    ampm = (ampm or "").lower().replace(".", "")
+    if ampm.startswith("p"):
+        return [hour % 12 + 12]
+    if ampm.startswith("a"):
+        return [0 if hour == 12 else hour]
+    if hour > 12:
+        return [hour]
+    return [hour % 12, hour % 12 + 12]
 
 
 def parse_reminder(text: str) -> tuple[str, datetime]:
     now = now_local()
     tomorrow = bool(TOMORROW.search(text))
+    today = bool(TODAY.search(text)) and not tomorrow
     leftover = TOMORROW.sub(" ", text)
+    leftover = TODAY.sub(" ", leftover)
+    day = "tomorrow" if tomorrow else ("today" if today else "soonest")
 
     when = now + timedelta(hours=1)
     timed = False
 
     if AT_NOON.search(leftover):
-        when = _soonest_clock(now, [12], 0, tomorrow)
+        when = _soonest_clock(now, [12], 0, day)
         leftover = AT_NOON.sub(" ", leftover)
         timed = True
     elif AT_MIDNIGHT.search(leftover):
-        when = _soonest_clock(now, [0], 0, tomorrow)
+        when = _soonest_clock(now, [0], 0, day)
         leftover = AT_MIDNIGHT.sub(" ", leftover)
         timed = True
 
-    match = AT_TIME.search(leftover)
+    match = CLOCK_TIME.search(leftover)
     if match:
         hour = int(match.group(1))
         minute = int(match.group(2) or 0)
-        ampm = (match.group(3) or "").lower().replace(".", "")
-        if ampm.startswith("p"):
-            hours = [hour % 12 + 12]
-        elif ampm.startswith("a"):
-            hours = [0 if hour == 12 else hour]
-        elif hour > 12:
-            hours = [hour]
-        else:
-            hours = [hour % 12, hour % 12 + 12]
-        when = _soonest_clock(now, hours, minute, tomorrow)
-        leftover = AT_TIME.sub(" ", leftover)
+        hours = _hours_from_clock(hour, match.group(3) or "")
+        when = _soonest_clock(now, hours, minute, day)
+        leftover = CLOCK_TIME.sub(" ", leftover, count=1)
         timed = True
+    else:
+        match = WORD_CLOCK.search(leftover)
+        if match:
+            hour = WORD_HOUR[match.group(1).lower()]
+            hours = _hours_from_clock(hour, match.group(2) or "")
+            when = _soonest_clock(now, hours, 0, day)
+            leftover = WORD_CLOCK.sub(" ", leftover, count=1)
+            timed = True
+        else:
+            match = AT_TIME.search(leftover)
+            if match:
+                hour = int(match.group(1))
+                minute = int(match.group(2) or 0)
+                hours = _hours_from_clock(hour, "")
+                when = _soonest_clock(now, hours, minute, day)
+                leftover = AT_TIME.sub(" ", leftover, count=1)
+                timed = True
 
     match = IN_DURATION.search(leftover)
     if match:
@@ -484,11 +568,13 @@ def parse_reminder(text: str) -> tuple[str, datetime]:
         timed = True
 
     if not timed and tomorrow:
-        when = _soonest_clock(now, [9], 0, True)
+        when = _soonest_clock(now, [9], 0, "tomorrow")
+    elif not timed and today:
+        when = _soonest_clock(now, [9], 0, "today")
 
     leftover = TONIGHT.sub(" ", leftover)
     title = re.sub(r"\s+", " ", leftover).strip(" ,.-")
-    title = re.sub(r"^(?:to|for)\s+", "", title, flags=re.I).strip(" ,.-")
+    title = re.sub(r"^(?:(?:to|for)\s+|\.\s*)+", "", title, flags=re.I).strip(" ,.-")
     if not title:
         title = "Reminder"
     return title, when
@@ -573,21 +659,178 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
     if source == target:
         return text
 
-    from deep_translator import GoogleTranslator, MyMemoryTranslator
+    text = (text or "").strip()
+    if not text:
+        return ""
 
+    import json as json_lib
+    import urllib.parse
+    import urllib.request
+
+    cache_key = f"{source}|{target}|{text}".lower()
+    cache_path = os.path.join(DIR, "translate_cache.json")
+    cache: dict = {}
     try:
-        return GoogleTranslator(source=source, target=target).translate(text)
+        if os.path.exists(cache_path):
+            with open(cache_path, encoding="utf-8") as handle:
+                cache = json_lib.load(handle) or {}
+            hit = cache.get(cache_key)
+            if isinstance(hit, str) and hit.strip():
+                return hit
     except Exception:
-        src = MYMEMORY_LOCALES.get(source_lang, MYMEMORY_LOCALES.get(source, "en-US"))
-        dst = MYMEMORY_LOCALES.get(target_lang, MYMEMORY_LOCALES.get(target, "en-US"))
+        cache = {}
+
+    def _remember(out: str) -> str:
         try:
-            return MyMemoryTranslator(source=src, target=dst).translate(text)
+            cache[cache_key] = out
+            # Keep cache bounded
+            if len(cache) > 500:
+                for old in list(cache.keys())[: len(cache) - 500]:
+                    cache.pop(old, None)
+            with open(cache_path, "w", encoding="utf-8") as handle:
+                json_lib.dump(cache, handle, ensure_ascii=False)
+        except Exception:
+            pass
+        return out
+
+    # 1) Fast Google gtx endpoint
+    gtx_rate_limited = False
+    try:
+        query = urllib.parse.urlencode(
+            {
+                "client": "gtx",
+                "sl": source,
+                "tl": target,
+                "dt": "t",
+                "q": text,
+            }
+        )
+        url = f"https://translate.googleapis.com/translate_a/single?{query}"
+        with urllib.request.urlopen(url, timeout=3) as resp:
+            payload = json_lib.loads(resp.read().decode("utf-8"))
+        parts = []
+        for row in payload[0] or []:
+            if row and row[0]:
+                parts.append(row[0])
+        out = "".join(parts).strip()
+        if out:
+            return _remember(out)
+    except Exception as err:
+        err_s = str(err)
+        gtx_rate_limited = "429" in err_s
+        print(f"translate gtx failed: {err}")
+
+    # 2) translators package — better under Google 429s (skip slow dead-ends first)
+    try:
+        import translators as ts
+
+        for engine in ("google", "alibaba"):
+            try:
+                out = ts.translate_text(
+                    text,
+                    translator=engine,
+                    from_language=source,
+                    to_language=target,
+                )
+                out = (out or "").strip()
+                if out:
+                    return _remember(out)
+            except Exception as eng_err:
+                print(f"translate {engine} failed: {eng_err}")
+    except Exception as err:
+        print(f"translate translators failed: {err}")
+
+    # 3) MyMemory (short timeout; skip if Google is actively rate-limiting us)
+    if not gtx_rate_limited:
+        try:
+            src = MYMEMORY_LOCALES.get(source_lang, MYMEMORY_LOCALES.get(source, "en-US"))
+            dst = MYMEMORY_LOCALES.get(target_lang, MYMEMORY_LOCALES.get(target, "en-US"))
+            query = urllib.parse.urlencode({"q": text, "langpair": f"{src}|{dst}"})
+            url = f"https://api.mymemory.translated.net/get?{query}"
+            with urllib.request.urlopen(url, timeout=2.5) as resp:
+                payload = json_lib.loads(resp.read().decode("utf-8"))
+            out = ((payload.get("responseData") or {}).get("translatedText") or "").strip()
+            if out and "MYMEMORY WARNING" not in out.upper():
+                return _remember(out)
         except Exception as err:
-            raise RuntimeError(f"translation failed: {err}") from err
+            print(f"translate mymemory failed: {err}")
+
+    # 4) Last resort: deep_translator scrape
+    try:
+        from deep_translator import GoogleTranslator
+
+        out = GoogleTranslator(source=source, target=target).translate(text)
+        out = (out or "").strip()
+        if out:
+            return _remember(out)
+    except Exception as err:
+        raise RuntimeError(f"translation failed: {err}") from err
+
+    raise RuntimeError("translation failed: empty result")
 
 
 def translate_from_english(text: str, target_lang: str) -> str:
     return translate_text(text, "en", target_lang)
+
+
+def _upmix_mono_pcm(mono: bytes, channels: int) -> bytes:
+    if channels <= 1:
+        return mono
+    # Duplicate each 16-bit sample across channels.
+    import array
+
+    samples = array.array("h")
+    samples.frombytes(mono)
+    out = array.array("h")
+    for sample in samples:
+        for _ in range(channels):
+            out.append(sample)
+    return out.tobytes()
+
+
+def _tts_macos_wav(text: str, lang: str, sample_rate: int) -> bytes | None:
+    """Offline macOS TTS via `say` + `afconvert` (~1s). Returns mono 16-bit WAV bytes."""
+    if sys.platform != "darwin":
+        return None
+    voice = SAY_VOICES.get(lang) or SAY_VOICES.get(lang.split("-")[0])
+    if not voice:
+        return None
+
+    import subprocess
+
+    aiff_path = None
+    wav_path = None
+    try:
+        aiff_path = tempfile.NamedTemporaryFile(suffix=".aiff", delete=False).name
+        wav_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
+        say = subprocess.run(
+            ["say", "-v", voice, "-o", aiff_path, text],
+            capture_output=True,
+            timeout=12,
+        )
+        if say.returncode != 0:
+            print(f"say failed: {say.stderr.decode('utf-8', 'ignore')[:200]}")
+            return None
+        conv = subprocess.run(
+            ["afconvert", "-f", "WAVE", "-d", f"LEI16@{sample_rate}", aiff_path, wav_path],
+            capture_output=True,
+            timeout=8,
+        )
+        if conv.returncode != 0:
+            print(f"afconvert failed: {conv.stderr.decode('utf-8', 'ignore')[:200]}")
+            return None
+        with open(wav_path, "rb") as handle:
+            return handle.read()
+    except Exception as err:
+        print(f"macos tts failed: {err}")
+        return None
+    finally:
+        for path in (aiff_path, wav_path):
+            if path and os.path.exists(path):
+                try:
+                    os.unlink(path)
+                except OSError:
+                    pass
 
 
 def tts_mp3_bytes(text: str, lang: str) -> bytes:
@@ -605,15 +848,27 @@ def tts_mp3_bytes(text: str, lang: str) -> bytes:
 
 
 def speak_translated_pcm(text: str, lang: str, sample_rate: int, channels: int) -> bytes:
+    """Synthesize speech as PCM matching the pin's sample format."""
+    text = (text or "").strip()
+    if not text:
+        return b""
+
+    # Prefer offline macOS voices — avoids slow/flaky gTTS network round-trips.
+    wav_bytes = _tts_macos_wav(text, lang, sample_rate)
+    if wav_bytes:
+        with wave.open(io.BytesIO(wav_bytes), "rb") as handle:
+            mono = handle.readframes(handle.getnframes())
+        return _upmix_mono_pcm(mono, channels)
+
     import miniaudio
 
     decoded = miniaudio.decode(
         tts_mp3_bytes(text, lang),
         output_format=miniaudio.SampleFormat.SIGNED16,
-        nchannels=channels,
+        nchannels=1,
         sample_rate=sample_rate,
     )
-    return decoded.samples.tobytes()
+    return _upmix_mono_pcm(decoded.samples.tobytes(), channels)
 
 
 def json_action(action: str, **payload):
@@ -923,8 +1178,13 @@ def note():
         wav_bytes = pcm_to_wav(pcm, sample_rate, channels, sample_width)
         transcript = transcribe(wav_bytes, language=source).strip()
         action, text = parse_command(transcript)
-        if action is None or not text:
+        if action is None:
             print(f"ignored: {transcript!r}")
+            resp = Response(status=204)
+            resp.headers["X-Action"] = "none"
+            return resp
+        if not text and action != "translate":
+            print(f"ignored empty: {transcript!r}")
             resp = Response(status=204)
             resp.headers["X-Action"] = "none"
             return resp
@@ -932,7 +1192,7 @@ def note():
         if action == "note":
             docs_ok = True
             try:
-                append_to_doc(text)
+                append_to_doc(f"Note: {text}")
             except FileNotFoundError as err:
                 docs_ok = False
                 print(f"note saved locally only (Docs not connected): {err}")
@@ -959,10 +1219,29 @@ def note():
 
         target = settings.get("target_language") or "es"
         target_name = settings.get("target_language_name") or "Spanish"
+        if not text:
+            # User only said "translate this" — ask them to include the phrase.
+            prompt = {
+                "es": "Di translate this y luego la frase.",
+                "en": "Say translate this, then the phrase.",
+            }.get(target.split("-")[0], "Say translate this, then the phrase.")
+            spoken = speak_translated_pcm(prompt, target, sample_rate, channels)
+            resp = Response(spoken, mimetype="application/octet-stream")
+            resp.headers["X-Action"] = "translate"
+            resp.headers["X-Sample-Rate"] = str(sample_rate)
+            resp.headers["X-Channels"] = str(channels)
+            resp.headers["X-Bits"] = "16"
+            resp.headers["X-Language"] = target
+            resp.status_code = 201
+            return resp
+
+        t0 = datetime.now(timezone.utc)
         translated = translate_text(text, source, target).strip()
+        t1 = datetime.now(timezone.utc)
         if not translated:
             return jsonify({"ok": False, "error": "empty translation"}), 500
         spoken = speak_translated_pcm(translated, target, sample_rate, channels)
+        t2 = datetime.now(timezone.utc)
         if not spoken:
             return jsonify({"ok": False, "error": "empty speech"}), 500
         store.add_recording(
@@ -971,8 +1250,16 @@ def note():
             translation=translated,
             language=target_name,
         )
+        try:
+            append_to_doc(f"Translate ({target_name}): {text} → {translated}")
+        except Exception as err:
+            print(f"translate saved locally only (Docs error): {err}")
         print(f"{source.upper()}: {text}")
         print(f"{target.upper()}: {translated}")
+        print(
+            f"translate timing: text={(t1 - t0).total_seconds():.2f}s "
+            f"tts={(t2 - t1).total_seconds():.2f}s audio={len(spoken)}B"
+        )
         resp = Response(spoken, mimetype="application/octet-stream")
         resp.headers["X-Action"] = "translate"
         resp.headers["X-Sample-Rate"] = str(sample_rate)

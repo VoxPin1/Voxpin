@@ -11,3 +11,4 @@ backend/voice_notes/service_account.json
 backend/voice_notes/token.json
 backend/voice_notes/voxpin_data.json
 backend/voice_notes/voxpin_data.json.tmp
+backend/voice_notes/translate_cache.json
