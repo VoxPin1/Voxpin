@@ -35,7 +35,7 @@
     { code: "th", name: "Thai", native: "ไทย" },
   ];
   const STATIC_HOST_NOTE =
-    "Voice recordings from the pin still need the local backend (backend/voice_notes ./run.sh), or a hosted server, because GitHub Pages cannot receive uploads.";
+    "Sign in and load Google notes, or open this page from the local companion to see pin-saved translations.";
 
   function isPublicStaticHost() {
     return /\.github\.io$/i.test(location.hostname);
@@ -414,6 +414,30 @@
     return true;
   }
 
+  function parseStoredNote(text, createdAt) {
+    const line = String(text || "").trim();
+    const translate = line.match(/^Translate\s*\(([^)]+)\):\s*(.+?)\s*(?:→|->)\s*(.+)$/s);
+    if (translate) {
+      return {
+        kind: "translate",
+        text: translate[2].trim(),
+        translation: translate[3].trim(),
+        language: translate[1].trim(),
+        created_at: createdAt || "",
+      };
+    }
+    const note = line.match(/^Note:\s*(.+)$/s);
+    if (note) {
+      return { kind: "note", text: note[1].trim(), created_at: createdAt || "" };
+    }
+    const lower = line.toLowerCase();
+    return {
+      kind: lower.startsWith("remind") || lower.startsWith("task") ? "task" : inferNoteKind(line),
+      text: line,
+      created_at: createdAt || "",
+    };
+  }
+
   function inferNoteKind(text) {
     const lower = String(text || "").toLowerCase();
     if (lower.startsWith("remind") || lower.startsWith("task")) return "task";
@@ -439,16 +463,20 @@
       if (el.paragraph) {
         const text = paragraphText(el.paragraph).trim();
         if (!text) continue;
+        if (/^\d{4}-\d{2}-\d{2}/.test(text)) continue;
         const style = el.paragraph.paragraphStyle?.namedStyleType || "";
         if (style === "HEADING_1" || style === "HEADING_2" || style === "TITLE") {
           ctx.day = text;
           continue;
         }
+        const parsed = parseStoredNote(text, parseDayStamp(ctx.day));
         notes.push({
-          id: `gdoc-${notes.length}-${text.slice(0, 24)}`,
-          kind: inferNoteKind(text),
-          text,
-          created_at: parseDayStamp(ctx.day),
+          id: `gdoc-${notes.length}-${parsed.text.slice(0, 24)}`,
+          kind: parsed.kind,
+          text: parsed.text,
+          translation: parsed.translation,
+          language: parsed.language,
+          created_at: parsed.created_at,
           source: "google-doc",
         });
       }
@@ -501,8 +529,35 @@
     state.recordings = notesFromGoogleDoc(doc);
     renderRecordings();
     if (els.footerMeta && isPublicStaticHost()) {
-      els.footerMeta.textContent = `${state.recordings.length} notes from Google Drive`;
+      els.footerMeta.textContent = `${state.recordings.length} notes`;
     }
+  }
+
+  function notesJsonUrl() {
+    if (document.querySelector("base[href]")) {
+      return new URL("notes.json", document.baseURI).href;
+    }
+    return "/static/notes.json";
+  }
+
+  function mergeNotes(primary, extra) {
+    const seen = new Set();
+    const out = [];
+    for (const item of [...(primary || []), ...(extra || [])]) {
+      const key = `${item.kind || ""}|${String(item.text || "").toLowerCase()}|${String(item.translation || "").toLowerCase()}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+    out.sort((a, b) => String(b.created_at || "").localeCompare(String(a.created_at || "")));
+    return out;
+  }
+
+  async function loadSeedNotes() {
+    const res = await fetch(notesJsonUrl(), { headers: { Accept: "application/json" } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.notes || [];
   }
 
   function updateProfileUi() {
@@ -961,11 +1016,8 @@
       (r) => state.filter === "all" || r.kind === state.filter
     );
     if (!items.length) {
-      els.recordingList.innerHTML = state.google.accessToken
-        ? '<p class="empty">No notes in your Google Doc yet. Speak a note on the pin (Apps Script) or add a line in the Doc.</p>'
-        : state.google.user
-          ? '<p class="empty">Signed in. Open Account and click Load notes &amp; calendar to show your Google Doc and Calendar here.</p>'
-          : '<p class="empty">No recordings yet. Click the pin button to start, click again to send — or hold to talk. Try “take notes…”, “translate this…”, or “remind me…”.</p>';
+      els.recordingList.innerHTML =
+        '<p class="empty">No notes yet. Ask the pin to translate a phrase, or add one in your Google Doc.</p>';
       return;
     }
     els.recordingList.innerHTML = items
@@ -988,9 +1040,9 @@
             <div style="display:grid;justify-items:end;gap:0.4rem">
               <time datetime="${escapeAttr(r.created_at || "")}">${formatWhen(r.created_at)}</time>
               ${
-                r.source === "google-doc"
+                r.source === "google-doc" || r.source === "voxpin-notes"
                   ? ""
-                  : `<button class="delete-btn" data-delete="${escapeAttr(r.id)}" aria-label="Delete recording">Delete</button>`
+                  : `<button class="delete-btn" data-delete="${escapeAttr(r.id)}" aria-label="Delete note">Delete</button>`
               }
             </div>
           </article>`;
@@ -1011,12 +1063,24 @@
   }
 
   async function loadRecordings() {
+    let seed = [];
+    try {
+      seed = await loadSeedNotes();
+    } catch {
+      seed = [];
+    }
+
     if (state.google.accessToken) {
       try {
         await loadNotesFromGoogleDoc();
+        state.recordings = mergeNotes(state.recordings, seed);
+        renderRecordings();
+        if (els.footerMeta && isPublicStaticHost()) {
+          els.footerMeta.textContent = `${state.recordings.length} notes`;
+        }
         return;
       } catch (err) {
-        if (isPublicStaticHost()) {
+        if (!seed.length && isPublicStaticHost()) {
           els.recordingList.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
           return;
         }
@@ -1025,18 +1089,21 @@
     if (!isPublicStaticHost()) {
       try {
         const data = await api("/api/recordings");
-        state.recordings = data.recordings || [];
+        state.recordings = mergeNotes(data.recordings || [], seed);
         renderRecordings();
         return;
       } catch (err) {
-        if (!state.google.user) {
+        if (!seed.length) {
           els.recordingList.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
           return;
         }
       }
     }
-    state.recordings = [];
+    state.recordings = seed;
     renderRecordings();
+    if (els.footerMeta) {
+      els.footerMeta.textContent = `${seed.length} translation notes`;
+    }
   }
 
   function langButtons(selectedCode) {

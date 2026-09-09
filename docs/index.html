@@ -6,7 +6,7 @@
     <title>VoxPin</title>
     <meta
       name="description"
-      content="VoxPin companion — recordings, translation language, and device-synced tasks."
+      content="VoxPin companion — notes, translations, and device-synced tasks."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -31,7 +31,7 @@
       </a>
       <nav class="tabs" role="tablist" aria-label="Companion sections">
         <button class="tab is-active" role="tab" aria-selected="true" data-tab="recordings">
-          Recordings
+          Notes
         </button>
         <button class="tab" role="tab" aria-selected="false" data-tab="language">
           Language
@@ -64,10 +64,10 @@
           <p class="brand">VoxPin</p>
           <h1>Your pin’s voice, kept close.</h1>
           <p class="lede">
-            Review recordings from the device, set the language it speaks, and keep tasks in sync.
+            Review notes and translations, set the language the pin speaks, and keep tasks in sync.
           </p>
           <div class="hero-actions">
-            <button class="btn primary" data-jump="recordings">Open recordings</button>
+            <button class="btn primary" data-jump="recordings">Open notes</button>
             <button class="btn ghost" data-jump="calendar">View calendar</button>
           </div>
         </div>
@@ -88,20 +88,20 @@
 
       <section class="panel is-active" id="panel-recordings" role="tabpanel">
         <div class="panel-head">
-          <h2>Recordings</h2>
-          <p>Notes from your Google Doc after you sign in, plus anything captured from the pin.</p>
+          <h2>Notes</h2>
+          <p>Phrases you asked the pin to translate, plus any notes saved to your Google Doc. No audio clips.</p>
         </div>
         <div class="filter-row">
           <button class="chip is-active" data-filter="all">All</button>
           <button class="chip" data-filter="note">Notes</button>
           <button class="chip" data-filter="translate">Translations</button>
           <button class="chip" data-filter="task">Tasks</button>
-          <button class="icon-btn" id="refreshRecordings" aria-label="Refresh recordings">
+          <button class="icon-btn" id="refreshRecordings" aria-label="Refresh notes">
             Refresh
           </button>
         </div>
         <div class="recording-list" id="recordingList">
-          <p class="empty">Loading recordings…</p>
+          <p class="empty">Loading notes…</p>
         </div>
       </section>
 
