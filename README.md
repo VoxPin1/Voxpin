@@ -13,6 +13,8 @@ cd backend/voice_notes
 
 Then open [http://127.0.0.1:8765/](http://127.0.0.1:8765/).
 
+A public preview of the companion UI is on GitHub Pages: [https://voxpin1.github.io/Voxpin/](https://voxpin1.github.io/Voxpin/). Recordings, calendar, and Google still need this local server.
+
 - **Recordings** — notes, translations, and tasks from the pin
 - **Language** — base language the pin speaks when translating
 - **Calendar** — tasks synced with Google Calendar (`./run.sh --login`)

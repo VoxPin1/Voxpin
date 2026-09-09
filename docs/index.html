@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoxPin</title>
+    <meta
+      name="description"
+      content="VoxPin companion — recordings, translation language, and device-synced tasks."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <base href="/Voxpin/" />
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true">
+      <div class="orb orb-a"></div>
+      <div class="orb orb-b"></div>
+      <div class="grain"></div>
+    </div>
+
+    <header class="topbar">
+      <a class="mark" href="#top" aria-label="VoxPin home">
+        <span class="mark-pin" aria-hidden="true"></span>
+        VoxPin
+      </a>
+      <nav class="tabs" role="tablist" aria-label="Companion sections">
+        <button class="tab is-active" role="tab" aria-selected="true" data-tab="recordings">
+          Recordings
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="language">
+          Language
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="calendar">
+          Calendar
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="google">
+          Google
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="device">
+          Device
+        </button>
+      </nav>
+      <button type="button" class="device-chip" id="deviceStatus" title="Device connection">
+        <span class="pulse"></span>
+        <span id="deviceStatusText">Checking pin…</span>
+      </button>
+    </header>
+
+    <main id="top">
+      <section class="hero" id="hero">
+        <div class="hero-copy">
+          <p class="brand">VoxPin</p>
+          <h1>Your pin’s voice, kept close.</h1>
+          <p class="lede">
+            Review recordings from the device, set the language it speaks, and keep tasks in sync.
+          </p>
+          <div class="hero-actions">
+            <button class="btn primary" data-jump="recordings">Open recordings</button>
+            <button class="btn ghost" data-jump="calendar">View calendar</button>
+          </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="wave-stage">
+            <svg class="wave" viewBox="0 0 400 160" preserveAspectRatio="none">
+              <path class="wave-path wave-back" d=""></path>
+              <path class="wave-path wave-mid" d=""></path>
+              <path class="wave-path wave-front" d=""></path>
+            </svg>
+            <div class="pin-silhouette">
+              <span class="pin-head"></span>
+              <span class="pin-body"></span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel is-active" id="panel-recordings" role="tabpanel">
+        <div class="panel-head">
+          <h2>Recordings</h2>
+          <p>Notes, translations, and tasks captured from your VoxPin.</p>
+        </div>
+        <div class="filter-row">
+          <button class="chip is-active" data-filter="all">All</button>
+          <button class="chip" data-filter="note">Notes</button>
+          <button class="chip" data-filter="translate">Translations</button>
+          <button class="chip" data-filter="task">Tasks</button>
+          <button class="icon-btn" id="refreshRecordings" aria-label="Refresh recordings">
+            Refresh
+          </button>
+        </div>
+        <div class="recording-list" id="recordingList">
+          <p class="empty">Loading recordings…</p>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-language" role="tabpanel" hidden>
+        <div class="panel-head">
+          <h2>Translate to</h2>
+          <p>
+            Pick the language the pin should speak when you say “translate this…”.
+            Voice commands stay in English (“take notes…”, “remind me…”).
+          </p>
+        </div>
+        <div class="language-current" id="languageCurrent">
+          <span class="label">Pin speaks</span>
+          <strong id="languageName">—</strong>
+          <p class="language-greeting" id="languageGreeting" aria-live="polite"></p>
+        </div>
+        <div class="language-grid" id="languageGrid">
+          <p class="empty">Loading languages…</p>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-calendar" role="tabpanel" hidden>
+        <div class="panel-head">
+          <h2>Calendar</h2>
+          <p>Tasks and reminders from your pin, synced with Google Calendar.</p>
+        </div>
+        <div class="cal-toolbar">
+          <button class="icon-btn" id="calPrev" aria-label="Previous month">‹</button>
+          <h3 id="calMonthLabel">—</h3>
+          <button class="icon-btn" id="calNext" aria-label="Next month">›</button>
+          <button class="btn ghost small" id="calToday">Today</button>
+        </div>
+        <div class="cal-layout">
+          <div class="calendar" id="calendarGrid" aria-label="Month calendar"></div>
+          <aside class="day-detail">
+            <h3 id="dayTitle">Select a day</h3>
+            <ul class="event-list" id="dayEvents">
+              <li class="empty">No day selected.</li>
+            </ul>
+            <p class="cal-note" id="calNote"></p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-google" role="tabpanel" hidden>
+        <div class="panel-head">
+          <h2>Google</h2>
+          <p>
+            Notes used Apps Script before. That local webhook config was lost on the fresh clone —
+            paste it back below. Calendar still needs Google sign-in separately.
+          </p>
+        </div>
+        <div class="google-status" id="googleStatus">
+          <p class="empty">Checking Google connection…</p>
+        </div>
+        <div class="google-card">
+          <h3>1. Restore Apps Script (Docs notes)</h3>
+          <p class="hint">
+            In Google Apps Script → Deploy → Manage deployments → copy the Web app URL
+            (<code>.../macros/s/.../exec</code>). Use the same secret as in your script’s
+            <code>SECRET</code> constant. Doc id in the example is already set in the app.
+          </p>
+          <label class="hint" for="appsScriptUrl">Web app URL</label>
+          <input
+            id="appsScriptUrl"
+            type="url"
+            spellcheck="false"
+            placeholder="https://script.google.com/macros/s/…/exec"
+          />
+          <label class="hint" for="appsScriptSecret">Secret</label>
+          <input id="appsScriptSecret" type="text" spellcheck="false" placeholder="same as SECRET in Code.gs" />
+          <div class="google-actions">
+            <button class="btn primary" id="saveAppsScript">Save Apps Script</button>
+            <button class="btn ghost" id="testAppsScript">Send test note</button>
+          </div>
+          <p class="device-hint" id="appsScriptHint"></p>
+        </div>
+        <div class="google-card">
+          <h3>2. OAuth for Calendar</h3>
+          <p class="hint">
+            Required for reminders and next-event on the pin (separate from Apps Script).
+            Create a Desktop OAuth client in Google Cloud, paste the JSON, Save, then Sign in.
+          </p>
+          <textarea
+            id="googleCreds"
+            rows="6"
+            spellcheck="false"
+            placeholder='{ "installed": { "client_id": "...", ... } }'
+          ></textarea>
+          <div class="google-actions">
+            <button class="btn primary" id="saveGoogleCreds">Save credentials</button>
+            <a class="btn ghost is-disabled" id="connectGoogle" aria-disabled="true">Sign in with Google</a>
+          </div>
+          <p class="device-hint" id="googleCredsHint"></p>
+          <p class="device-hint" id="googleConnectHint"></p>
+          <p class="hint">
+            Target Doc:
+            <a id="googleDocLink" href="#" target="_blank" rel="noopener">open Doc</a>
+          </p>
+        </div>
+      </section>
+
+      <section class="panel" id="panel-device" role="tabpanel" hidden>
+        <div class="panel-head">
+          <h2>Device</h2>
+          <p>Connect your VoxPin over Bluetooth. Once paired, this site remembers it.</p>
+        </div>
+        <div class="device-card" id="deviceCard">
+          <div class="device-card-status">
+            <span class="device-dot" id="deviceDot"></span>
+            <div>
+              <strong id="deviceCardTitle">Not connected</strong>
+              <p id="deviceCardMeta">Pair your pin to sync status here.</p>
+            </div>
+          </div>
+          <div class="device-card-actions">
+            <button class="btn primary" id="btnConnectBt">Connect with Bluetooth</button>
+            <button class="btn ghost" id="btnForgetBt" hidden>Forget device</button>
+          </div>
+          <p class="device-hint" id="deviceHint"></p>
+        </div>
+      </section>
+    </main>
+
+    <div class="modal-backdrop" id="btModal" hidden>
+      <div
+        class="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="btModalTitle"
+        aria-describedby="btModalDesc"
+      >
+        <p class="modal-eyebrow">Welcome to VoxPin</p>
+        <h2 id="btModalTitle">Connect your device</h2>
+        <p id="btModalDesc">
+          Pair your VoxPin over Bluetooth to get started. You’ll only need to do this once —
+          next time you open the site, your pin will already show as connected.
+        </p>
+        <div class="modal-actions">
+          <button class="btn primary" id="btModalConnect">Connect with Bluetooth</button>
+          <button class="btn ghost" id="btModalLater">Not now</button>
+        </div>
+        <p class="modal-note" id="btModalNote"></p>
+      </div>
+    </div>
+
+    <footer class="site-foot">
+      <span>VoxPin companion</span>
+      <span id="footerMeta"></span>
+    </footer>
+
+    <script src="js/app.js"></script>
+  </body>
+</html>
