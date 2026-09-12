@@ -1,0 +1,12 @@
+.venv
+__pycache__
+*.pyc
+token.json
+credentials.json
+service_account.json
+apps_script_secret.txt
+apps_script_url.txt
+voxpin_data.json
+voxpin_data.json.tmp
+translate_cache.json
+*.md

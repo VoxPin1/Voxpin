@@ -72,6 +72,7 @@
       accessToken: "",
       tokenClient: null,
     },
+    lastAlertId: "",
   };
 
   const els = {
@@ -82,6 +83,7 @@
       calendar: document.getElementById("panel-calendar"),
       google: document.getElementById("panel-google"),
       device: document.getElementById("panel-device"),
+      alerts: document.getElementById("panel-alerts"),
     },
     deviceStatus: document.getElementById("deviceStatus"),
     deviceStatusText: document.getElementById("deviceStatusText"),
@@ -123,6 +125,12 @@
     deviceCardTitle: document.getElementById("deviceCardTitle"),
     deviceCardMeta: document.getElementById("deviceCardMeta"),
     deviceHint: document.getElementById("deviceHint"),
+    alertList: document.getElementById("alertList"),
+    alertBanner: document.getElementById("alertBanner"),
+    alertBannerKind: document.getElementById("alertBannerKind"),
+    alertBannerText: document.getElementById("alertBannerText"),
+    alertBannerMap: document.getElementById("alertBannerMap"),
+    alertBannerAck: document.getElementById("alertBannerAck"),
   };
 
   function bluetoothSupported() {
@@ -864,6 +872,7 @@
     if (name === "calendar") renderCalendar();
     if (name === "google") loadGoogleStatus();
     if (name === "device") updateDeviceUi();
+    if (name === "alerts") loadAlerts({ silent: true });
     if (scroll) {
       document.getElementById(`panel-${name}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -949,6 +958,85 @@
     }
   }
 
+  function renderAlerts(alerts) {
+    if (!els.alertList) return;
+    if (!alerts.length) {
+      els.alertList.innerHTML = '<p class="empty">No help or location pings yet.</p>';
+      return;
+    }
+    els.alertList.innerHTML = alerts
+      .map((item) => {
+        const map = item.maps_url
+          ? `<p class="meta"><a href="${escapeAttr(item.maps_url)}" target="_blank" rel="noopener">Open map</a></p>`
+          : "";
+        return `
+          <article class="recording">
+            <span class="kind-badge ${escapeAttr(item.kind)}">${kindLabel(item.kind)}</span>
+            <div>
+              <h3>${escapeHtml(item.message || "")}</h3>
+              ${item.place ? `<p class="meta">${escapeHtml(item.place)}</p>` : ""}
+              ${map}
+            </div>
+            <time datetime="${escapeAttr(item.created_at || "")}">${formatWhen(item.created_at)}</time>
+          </article>`;
+      })
+      .join("");
+  }
+
+  function showAlertBanner(item) {
+    if (!els.alertBanner || !item) return;
+    els.alertBanner.hidden = false;
+    els.alertBanner.classList.toggle("is-ping", item.kind === "ping");
+    if (els.alertBannerKind) els.alertBannerKind.textContent = kindLabel(item.kind);
+    if (els.alertBannerText) els.alertBannerText.textContent = item.message || "";
+    if (els.alertBannerMap) {
+      if (item.maps_url) {
+        els.alertBannerMap.hidden = false;
+        els.alertBannerMap.href = item.maps_url;
+      } else {
+        els.alertBannerMap.hidden = true;
+      }
+    }
+  }
+
+  function desktopNotify(item) {
+    if (!item || typeof Notification === "undefined") return;
+    if (Notification.permission !== "granted") return;
+    try {
+      new Notification(item.kind === "sos" ? "VoxPin help" : "VoxPin location", {
+        body: item.message || "",
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function loadAlerts({ silent = false } = {}) {
+    if (isPublicStaticHost()) return;
+    try {
+      const data = await api("/api/alerts");
+      const alerts = data.alerts || [];
+      renderAlerts(alerts);
+      const newest = alerts[0];
+      if (newest && newest.id && newest.id !== state.lastAlertId) {
+        const first = !state.lastAlertId;
+        state.lastAlertId = newest.id;
+        if (!first) {
+          showAlertBanner(newest);
+          if (Notification.permission === "default") {
+            Notification.requestPermission().then(() => desktopNotify(newest));
+          } else {
+            desktopNotify(newest);
+          }
+        }
+      }
+    } catch (err) {
+      if (!silent && els.alertList) {
+        els.alertList.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+      }
+    }
+  }
+
   async function api(path, options) {
     if (isPublicStaticHost()) {
       throw new Error(STATIC_HOST_NOTE);
@@ -993,6 +1081,10 @@
   function kindLabel(kind) {
     if (kind === "translate") return "Translate";
     if (kind === "task") return "Task";
+    if (kind === "timer") return "Timer";
+    if (kind === "weather") return "Weather";
+    if (kind === "ping") return "Location";
+    if (kind === "sos") return "Help";
     return "Note";
   }
 
@@ -1014,7 +1106,13 @@
               }</p>`
             : r.kind === "task" && r.when
               ? `<p class="meta">Due ${escapeHtml(r.when)}</p>`
-              : "";
+              : r.kind === "timer" && r.when
+                ? `<p class="meta">Rings ${escapeHtml(r.when)}</p>`
+                : (r.kind === "ping" || r.kind === "sos") && r.when
+                  ? `<p class="meta">${escapeHtml(r.when)}</p>`
+                  : r.kind === "weather" && r.when
+                    ? `<p class="meta">${escapeHtml(r.when)}</p>`
+                    : "";
         return `
           <article class="recording" data-id="${escapeAttr(r.id)}">
             <span class="kind-badge ${escapeAttr(r.kind)}">${kindLabel(r.kind)}</span>
@@ -1351,6 +1449,11 @@
     document.getElementById("refreshRecordings")?.addEventListener("click", () => {
       loadRecordings();
       loadStatus();
+      loadAlerts({ silent: true });
+    });
+
+    els.alertBannerAck?.addEventListener("click", () => {
+      if (els.alertBanner) els.alertBanner.hidden = true;
     });
 
     els.recordingList.addEventListener("click", async (e) => {
@@ -1545,7 +1648,7 @@
       activateTab("recordings");
     }
     await restoreBluetooth();
-    await Promise.all([loadStatus(), loadRecordings(), loadLanguages(), loadCalendar(), loadGoogleStatus()]);
+    await Promise.all([loadStatus(), loadRecordings(), loadLanguages(), loadCalendar(), loadGoogleStatus(), loadAlerts({ silent: true })]);
     if (isPublicStaticHost() && els.footerMeta) {
       els.footerMeta.textContent = state.google.user
         ? `Signed in as ${state.google.user.email || state.google.user.name}`
@@ -1565,6 +1668,7 @@
       loadCalendar();
       loadGoogleStatus();
     }, 20000);
+    setInterval(() => loadAlerts({ silent: true }), 4000);
   }
 
   boot();

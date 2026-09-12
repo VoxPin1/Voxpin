@@ -8,12 +8,12 @@
 
 #include "audio_bsp.h"
 #include "backend_http.h"
+#include "board_pins.h"
 #include "driver/gpio.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "user_config.h"
 
 static const char *TAG = "voice_note";
 
@@ -24,7 +24,7 @@ static constexpr uint32_t kBytesPerSec = kSampleRate * kChannels * (kBits / 8);
 static constexpr uint32_t kChunkBytes = 4096;
 static constexpr uint32_t kMaxSeconds = 20;
 static constexpr uint32_t kMaxBytes = kBytesPerSec * kMaxSeconds;
-static constexpr uint32_t kMinBytes = kBytesPerSec / 4;  // ~0.25 s
+static constexpr uint32_t kMinBytes = kBytesPerSec / 4;
 static constexpr uint32_t kHoldToTalkMs = 400;
 static constexpr uint32_t kClickAutoSendMs = 8000;
 
@@ -49,10 +49,9 @@ static void wait_boot_release(void)
   while (boot_pressed()) {
     vTaskDelay(pdMS_TO_TICKS(20));
   }
-  vTaskDelay(pdMS_TO_TICKS(40));  // debounce
+  vTaskDelay(pdMS_TO_TICKS(40));
 }
 
-// E-paper refreshes slowly — pause so the new status can paint before we block.
 static void show_status(const char *text, uint32_t hold_ms)
 {
   set_status(text);
@@ -129,10 +128,11 @@ static bool handle_clip(uint8_t *data, uint32_t len)
   http.addHeader("X-Sample-Rate", "16000");
   http.addHeader("X-Channels", "2");
   http.addHeader("X-Bits", "16");
-  const char *header_keys[] = {"X-Action"};
-  http.collectHeaders(header_keys, 1);
+  const char *header_keys[] = {"X-Action", "X-Status"};
+  http.collectHeaders(header_keys, 2);
 
   int code = http.POST(data, len);
+  String pin_status = http.header("X-Status");
   if (code == 204) {
     http.end();
     return true;
@@ -140,8 +140,16 @@ static bool handle_clip(uint8_t *data, uint32_t len)
   if (code == 200) {
     String action = http.header("X-Action");
     http.end();
-    if (action == "remind") {
+    if (pin_status.length() > 0) {
+      show_status(pin_status.c_str(), 3500);
+    } else if (action == "remind") {
       show_status("Reminded", 3500);
+    } else if (action == "timer") {
+      show_status("Timer set", 3500);
+    } else if (action == "ping") {
+      show_status("Sent loc", 3500);
+    } else if (action == "sos") {
+      show_status("Help sent", 3500);
     } else if (action == "need_login") {
       show_status("Sign in", 3500);
     } else if (action == "note_local") {
@@ -164,7 +172,7 @@ static bool handle_clip(uint8_t *data, uint32_t len)
     return false;
   }
 
-  show_status("Translating", 0);
+  show_status(pin_status.length() ? pin_status.c_str() : "Speaking", 0);
   uint32_t spoken = read_response(http, data, kMaxBytes);
   http.end();
 
@@ -194,8 +202,6 @@ static void voice_note_task(void *arg)
       vTaskDelay(pdMS_TO_TICKS(20));
     }
 
-    // Start capturing immediately. A short click = record until next click;
-    // a long hold = record until release (classic push-to-talk).
     show_status("Recording", 0);
     uint32_t written = 0;
     const uint32_t press_started = millis();
@@ -207,18 +213,15 @@ static void voice_note_task(void *arg)
 
       const bool down = boot_pressed();
       if (!down) {
-        // Held long enough then released → push-to-talk stop.
         if (!saw_release && (millis() - press_started) >= kHoldToTalkMs) {
           break;
         }
         saw_release = true;
       } else if (saw_release) {
-        // Second press after a short first click → toggle stop.
         wait_boot_release();
         break;
       }
 
-      // After a short click, auto-send so talking without a 2nd click still works.
       if (saw_release && (millis() - press_started) >= kClickAutoSendMs) {
         break;
       }

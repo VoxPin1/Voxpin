@@ -579,6 +579,49 @@ main {
   color: var(--fog);
 }
 
+.kind-badge.timer {
+  background: rgba(127, 219, 255, 0.16);
+  color: #7fdbff;
+}
+
+.kind-badge.weather {
+  background: rgba(255, 220, 0, 0.14);
+  color: #ffdc00;
+}
+
+.kind-badge.ping {
+  background: rgba(46, 204, 113, 0.16);
+  color: #2ecc71;
+}
+
+.kind-badge.sos {
+  background: rgba(255, 82, 82, 0.18);
+  color: #ff5252;
+}
+
+.alert-banner {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  background: rgba(255, 82, 82, 0.16);
+  border-bottom: 1px solid rgba(255, 82, 82, 0.35);
+  color: var(--ink);
+}
+
+.alert-banner.is-ping {
+  background: rgba(46, 204, 113, 0.14);
+  border-bottom-color: rgba(46, 204, 113, 0.35);
+}
+
+.alert-banner[hidden] {
+  display: none;
+}
+
 .recording h3 {
   margin: 0;
   font-size: 1.05rem;

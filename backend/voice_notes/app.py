@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import audioop
+import base64
 import io
 import os
 import re
@@ -15,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 
 from flask import Flask, jsonify, request, Response, send_from_directory
 
+import family
 import store
 
 DIR = os.path.dirname(os.path.abspath(__file__))
@@ -24,7 +26,9 @@ SERVICE_ACCOUNT_PATH = os.path.join(DIR, "service_account.json")
 TOKEN_PATH = os.path.join(DIR, "token.json")
 WEBHOOK_URL_PATH = os.path.join(DIR, "apps_script_url.txt")
 WEBHOOK_SECRET_PATH = os.path.join(DIR, "apps_script_secret.txt")
-DOCUMENT_ID = "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8"
+DOCUMENT_ID = os.environ.get(
+    "VOXPIN_DOCUMENT_ID", "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8"
+)
 # Primary calendar for reminders + companion month view (from your Calendar share link).
 CALENDAR_ID = os.environ.get("VOXPIN_CALENDAR_ID", "riangadey12@gmail.com")
 DOC_SCOPES = ["https://www.googleapis.com/auth/documents"]
@@ -62,6 +66,39 @@ SAY_VOICES = {
 }
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="/static")
+
+
+def hydrate_secrets_from_env() -> None:
+    """Write Google/Apps Script files from Fly (or other host) env vars."""
+
+    def write_text(path: str, value: str | None) -> None:
+        if not value:
+            return
+        with open(path, "w", encoding="utf-8") as handle:
+            handle.write(value)
+
+    def write_b64_or_text(path: str, b64_key: str, text_key: str) -> None:
+        raw_b64 = os.environ.get(b64_key)
+        if raw_b64:
+            with open(path, "wb") as handle:
+                handle.write(base64.b64decode(raw_b64))
+            return
+        write_text(path, os.environ.get(text_key))
+
+    write_b64_or_text(TOKEN_PATH, "VOXPIN_GOOGLE_TOKEN_B64", "VOXPIN_GOOGLE_TOKEN_JSON")
+    write_b64_or_text(
+        CREDENTIALS_PATH, "VOXPIN_GOOGLE_CREDENTIALS_B64", "VOXPIN_GOOGLE_CREDENTIALS_JSON"
+    )
+    write_b64_or_text(
+        SERVICE_ACCOUNT_PATH,
+        "VOXPIN_GOOGLE_SERVICE_ACCOUNT_B64",
+        "VOXPIN_GOOGLE_SERVICE_ACCOUNT_JSON",
+    )
+    write_text(WEBHOOK_URL_PATH, os.environ.get("VOXPIN_APPS_SCRIPT_URL"))
+    write_text(WEBHOOK_SECRET_PATH, os.environ.get("VOXPIN_APPS_SCRIPT_SECRET"))
+
+
+hydrate_secrets_from_env()
 
 
 def _is_service_account_file(path: str) -> bool:
@@ -423,6 +460,42 @@ REMIND_PREFIX = re.compile(
     r"[\s,.:;!\-]*",
     re.IGNORECASE,
 )
+LOCATION_PREFIX = re.compile(
+    r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?"
+    r"(?:where\s+am\s+i|share\s+(?:my\s+)?location|send\s+(?:my\s+)?location|"
+    r"ping\s+(?:my\s+)?location|find\s+me)\b"
+    r"[\s,.:;!\-]*",
+    re.IGNORECASE,
+)
+SOS_PREFIX = re.compile(
+    r"^\s*(?:(?:ok|okay|hey)[, ]+)?"
+    r"(?:sos|help\s+me|i\s+need\s+help|emergency|call\s+(?:mom|dad|mommy|daddy|mama|papa))\b"
+    r"[\s,.:;!\-]*",
+    re.IGNORECASE,
+)
+WEATHER_PREFIX = re.compile(
+    r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?"
+    r"(?:what(?:'s| is|s)\s+the\s+weather|how(?:'s| is|s)\s+the\s+weather|"
+    r"(?:the\s+)?weather|is\s+it\s+(?:going\s+to\s+)?rain(?:ing)?|"
+    r"do\s+i\s+need\s+a\s+(?:jacket|coat|umbrella)|"
+    r"need\s+a\s+(?:jacket|coat|umbrella))\b"
+    r"[\s,.:;!\-]*",
+    re.IGNORECASE,
+)
+TIMER_PREFIX = re.compile(
+    r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?"
+    r"(?:set\s+(?:a\s+)?timer|timer|countdown|start\s+a\s+timer)\b"
+    r"[\s,.:;!\-]*",
+    re.IGNORECASE,
+)
+MORE_MINUTES_PREFIX = re.compile(
+    r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?"
+    r"(?:(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"fifteen|twenty|thirty)\s+more\s+minutes?|"
+    r"(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"fifteen|twenty|thirty)\s+minutes?\s+(?:till|until|to|before))\b",
+    re.IGNORECASE,
+)
 IN_DURATION = re.compile(
     r"\bin\s+(?:an?\s+)?(\d+)?\s*(minutes?|mins?|hours?|hrs?)\b",
     re.IGNORECASE,
@@ -591,6 +664,20 @@ def parse_command(transcript: str) -> tuple[str | None, str]:
     match = REMIND_PREFIX.match(text)
     if match:
         return "remind", text[match.end() :].strip(" ,.-")
+    match = LOCATION_PREFIX.match(text)
+    if match:
+        return "location", text[match.end() :].strip(" ,.-")
+    match = SOS_PREFIX.match(text)
+    if match:
+        return "sos", text[match.end() :].strip(" ,.-")
+    match = WEATHER_PREFIX.match(text)
+    if match:
+        return "weather", text[match.end() :].strip(" ,.-")
+    match = TIMER_PREFIX.match(text)
+    if match:
+        return "timer", text[match.end() :].strip(" ,.-")
+    if MORE_MINUTES_PREFIX.match(text):
+        return "timer", text
     return None, text
 
 
@@ -871,9 +958,11 @@ def speak_translated_pcm(text: str, lang: str, sample_rate: int, channels: int) 
     return _upmix_mono_pcm(decoded.samples.tobytes(), channels)
 
 
-def json_action(action: str, **payload):
+def json_action(action: str, *, status: str | None = None, **payload):
     resp = jsonify({"ok": True, "action": action, **payload})
     resp.headers["X-Action"] = action
+    if status:
+        resp.headers["X-Status"] = status
     return resp
 
 
@@ -1159,6 +1248,67 @@ def next_event():
     return jsonify({"ok": True, **event})
 
 
+def _wifi_from_request() -> list[dict]:
+    payload = request.get_json(silent=True) if request.is_json else None
+    if isinstance(payload, dict):
+        wifi = payload.get("wifi") or []
+        if isinstance(wifi, list):
+            return wifi
+    return []
+
+
+def handle_parent_ping(kind: str, *, wifi: list[dict] | None = None, detail: str = "") -> dict:
+    loc = family.geolocate(wifi)
+    place = loc.get("place") or "unknown area"
+    if kind == "sos":
+        message = detail.strip() or "Help requested"
+        title = "VoxPin help"
+        body = f"{message} near {place}"
+        status = "Help sent"
+    else:
+        message = detail.strip() or "Location shared"
+        title = "VoxPin location"
+        body = f"{message} · {place}"
+        status = "Sent loc"
+    alert = store.add_alert(
+        kind,
+        body,
+        place=place,
+        maps_url=loc.get("maps_url"),
+        lat=loc.get("lat"),
+        lon=loc.get("lon"),
+    )
+    store.add_recording(kind, body, when=place)
+    family.notify_parent(title, body)
+    print(f"{kind}: {body} {loc.get('maps_url')}")
+    return {
+        "alert": alert,
+        "place": place,
+        "maps_url": loc.get("maps_url"),
+        "lat": loc.get("lat"),
+        "lon": loc.get("lon"),
+        "status": status,
+        "source": loc.get("source"),
+    }
+
+
+@app.post("/ping")
+def ping_location():
+    result = handle_parent_ping("ping", wifi=_wifi_from_request())
+    return json_action("ping", status=result["status"], **{k: v for k, v in result.items() if k != "status"})
+
+
+@app.post("/sos")
+def sos_alert():
+    result = handle_parent_ping("sos", wifi=_wifi_from_request())
+    return json_action("sos", status=result["status"], **{k: v for k, v in result.items() if k != "status"})
+
+
+@app.get("/api/alerts")
+def api_alerts():
+    return jsonify({"ok": True, "alerts": store.list_alerts()})
+
+
 @app.post("/note")
 def note():
     pcm = request.get_data(cache=False)
@@ -1183,7 +1333,7 @@ def note():
             resp = Response(status=204)
             resp.headers["X-Action"] = "none"
             return resp
-        if not text and action != "translate":
+        if not text and action not in {"translate", "location", "sos", "weather"}:
             print(f"ignored empty: {transcript!r}")
             resp = Response(status=204)
             resp.headers["X-Action"] = "none"
@@ -1215,7 +1365,45 @@ def note():
             created = create_calendar_event(title, when)
             store.add_recording("task", title, when=created["when"])
             print(f"remind: {created['when']} {title}")
-            return json_action("remind", text=title, when=created["when"])
+            return json_action("remind", status="Reminded", text=title, when=created["when"])
+
+        if action == "timer":
+            if not calendar_ready():
+                print("timer needs Google Calendar login")
+                return json_action("need_login", status="Sign in")
+            title, when, minutes = family.parse_timer(text or "10 minutes")
+            created = create_calendar_event(title, when)
+            store.add_recording("timer", title, when=created["when"])
+            print(f"timer: {minutes} min → {created['when']} {title}")
+            return json_action(
+                "timer",
+                status=f"Timer {minutes}m",
+                text=title,
+                when=created["when"],
+                minutes=minutes,
+            )
+
+        if action in {"location", "sos"}:
+            result = handle_parent_ping(action if action == "sos" else "ping", detail=text)
+            return json_action(result["alert"]["kind"], status=result["status"], **{
+                k: v for k, v in result.items() if k != "status"
+            })
+
+        if action == "weather":
+            loc = family.geolocate()
+            summary = family.weather_summary(loc["lat"], loc["lon"])
+            store.add_recording("weather", summary["spoken"], when=loc.get("place"))
+            spoken = speak_translated_pcm(summary["spoken"], "en", sample_rate, channels)
+            if not spoken:
+                return json_action("weather", status=summary["status"], text=summary["spoken"])
+            resp = Response(spoken, mimetype="application/octet-stream")
+            resp.headers["X-Action"] = "weather"
+            resp.headers["X-Status"] = summary["status"]
+            resp.headers["X-Sample-Rate"] = str(sample_rate)
+            resp.headers["X-Channels"] = str(channels)
+            resp.headers["X-Bits"] = "16"
+            resp.status_code = 201
+            return resp
 
         target = settings.get("target_language") or "es"
         target_name = settings.get("target_language_name") or "Spanish"
@@ -1286,7 +1474,7 @@ def main() -> int:
         action="store_true",
         help="Open browser to connect Google Docs and Google Calendar",
     )
-    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", DEFAULT_PORT)))
     args = parser.parse_args()
 
     if args.login:

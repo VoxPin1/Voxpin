@@ -7,3 +7,4 @@ gTTS>=2.5
 deep-translator>=1.11
 translators>=5.9
 miniaudio>=1.61
+gunicorn>=22.0

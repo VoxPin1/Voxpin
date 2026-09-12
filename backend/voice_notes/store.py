@@ -91,7 +91,7 @@ def _normalize_settings(settings: dict[str, Any]) -> dict[str, Any]:
 
 
 def _empty() -> dict[str, Any]:
-    return {"settings": dict(DEFAULT_SETTINGS), "recordings": []}
+    return {"settings": dict(DEFAULT_SETTINGS), "recordings": [], "alerts": []}
 
 
 def _load() -> dict[str, Any]:
@@ -106,6 +106,8 @@ def _load() -> dict[str, Any]:
             data["settings"] = _normalize_settings(data["settings"])
         if "recordings" not in data:
             data["recordings"] = []
+        if "alerts" not in data:
+            data["alerts"] = []
         return data
     except Exception:
         return _empty()
@@ -175,6 +177,41 @@ def add_recording(
         data = _load()
         data["recordings"].insert(0, item)
         data["recordings"] = data["recordings"][:500]
+        _save(data)
+    return item
+
+
+def list_alerts(limit: int = 50) -> list[dict[str, Any]]:
+    with _LOCK:
+        items = list(_load().get("alerts") or [])
+    items.sort(key=lambda item: item.get("created_at", ""), reverse=True)
+    return items[:limit]
+
+
+def add_alert(
+    kind: str,
+    message: str,
+    *,
+    place: str | None = None,
+    maps_url: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+) -> dict[str, Any]:
+    item = {
+        "id": str(uuid.uuid4()),
+        "kind": kind,
+        "message": message,
+        "place": place,
+        "maps_url": maps_url,
+        "lat": lat,
+        "lon": lon,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with _LOCK:
+        data = _load()
+        data.setdefault("alerts", [])
+        data["alerts"].insert(0, item)
+        data["alerts"] = data["alerts"][:100]
         _save(data)
     return item
 

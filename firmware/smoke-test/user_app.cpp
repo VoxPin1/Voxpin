@@ -3,6 +3,8 @@
 #include <time.h>
 #include <HTTPClient.h>
 #include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include "freertos/FreeRTOS.h"
 #include "user_app.h"
 #include "driver/gpio.h"
@@ -15,7 +17,7 @@
 #include "i2c_bsp.h"
 #include "i2c_equipment.h"
 #include "adc_bsp.h"
-#include "backend_config.h"
+#include "backend_http.h"
 #include "voice_note.h"
 
 epaper_driver_display *driver = NULL;
@@ -143,12 +145,11 @@ static void refresh_event_label(lv_obj_t *label)
     return;
   }
 
-  char url[80];
-  snprintf(url, sizeof(url), "http://%s:%d/next-event", BACKEND_HOST, BACKEND_PORT);
-
+  WiFiClientSecure tls;
+  WiFiClient plain;
   HTTPClient http;
-  http.setTimeout(4000);
-  if (!http.begin(url)) {
+  http.setTimeout(8000);
+  if (!backend_http_begin(http, tls, plain, "/next-event")) {
     return;
   }
 

@@ -17,6 +17,14 @@
     <link rel="stylesheet" href="/static/css/styles.css" />
   </head>
   <body>
+    <div class="alert-banner" id="alertBanner" hidden>
+      <div>
+        <strong id="alertBannerKind">Alert</strong>
+        <span id="alertBannerText"></span>
+      </div>
+      <a id="alertBannerMap" href="#" target="_blank" rel="noopener" hidden>Open map</a>
+      <button type="button" class="btn ghost small" id="alertBannerAck">Got it</button>
+    </div>
     <div class="atmosphere" aria-hidden="true">
       <div class="orb orb-a"></div>
       <div class="orb orb-b"></div>
@@ -37,6 +45,9 @@
         </button>
         <button class="tab" role="tab" aria-selected="false" data-tab="calendar">
           Calendar
+        </button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="alerts">
+          Alerts
         </button>
         <button class="tab" role="tab" aria-selected="false" data-tab="google">
           Account
@@ -64,6 +75,7 @@
           <h1>Your pin’s voice, kept close.</h1>
           <p class="lede">
             Review notes and translations, set the language the pin speaks, and keep tasks in sync.
+            Help and location pings only go out when the pin asks — never live tracking.
           </p>
           <div class="hero-actions">
             <button class="btn primary" data-jump="recordings">Open notes</button>
@@ -95,6 +107,10 @@
           <button class="chip" data-filter="note">Notes</button>
           <button class="chip" data-filter="translate">Translations</button>
           <button class="chip" data-filter="task">Tasks</button>
+          <button class="chip" data-filter="timer">Timers</button>
+          <button class="chip" data-filter="weather">Weather</button>
+          <button class="chip" data-filter="ping">Location</button>
+          <button class="chip" data-filter="sos">Help</button>
           <button class="icon-btn" id="refreshRecordings" aria-label="Refresh notes">
             Refresh
           </button>
@@ -145,6 +161,19 @@
         </div>
       </section>
 
+      <section class="panel" id="panel-alerts" role="tabpanel" hidden>
+        <div class="panel-head">
+          <h2>Family alerts</h2>
+          <p>
+            Only when the pin asks. Tap PLUS to share location; hold PLUS for help.
+            Keep this page open to see it instantly on the laptop.
+          </p>
+        </div>
+        <div class="recording-list" id="alertList">
+          <p class="empty">No alerts yet.</p>
+        </div>
+      </section>
+
       <section class="panel" id="panel-google" role="tabpanel" hidden>
         <div class="panel-head">
           <h2>Account</h2>
@@ -192,6 +221,10 @@
             <button class="btn ghost" id="btnForgetBt" hidden>Forget device</button>
           </div>
           <p class="device-hint" id="deviceHint"></p>
+          <p class="hint">
+            PLUS button: tap to share location with this laptop, hold about a second for help.
+            BOOT is still hold-to-talk. PWR turns the pin on from battery.
+          </p>
         </div>
         <div class="google-card" id="profileCard" hidden>
           <h3>Profile</h3>

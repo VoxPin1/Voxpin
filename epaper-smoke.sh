@@ -28,6 +28,7 @@ sync_patches() {
   cp "${PATCH_DIR}/i2c_equipment.h" "${SKETCH}/"
   cp "${PATCH_DIR}/voice_note.cpp" "${SKETCH}/"
   cp "${PATCH_DIR}/voice_note.h" "${SKETCH}/"
+  cp "${PATCH_DIR}/backend_http.h" "${SKETCH}/"
   cp "${PATCH_DIR}/ble_companion.cpp" "${SKETCH}/"
   cp "${PATCH_DIR}/ble_companion.h" "${SKETCH}/"
   cp "${PATCH_DIR}/lvgl_port.cpp" "${SKETCH}/"
