@@ -1,10 +1,12 @@
 #include "audio_bsp.h"
 
+#include <string.h>
+
 #include "board_pins.h"
 #include "driver/gpio.h"
-#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "src/codec_board/codec_board.h"
 #include "src/codec_board/codec_init.h"
 #include "src/esp_codec_dev/include/esp_codec_dev.h"
@@ -13,6 +15,9 @@ static const char *TAG = "audio_bsp";
 
 static esp_codec_dev_handle_t playback = NULL;
 static esp_codec_dev_handle_t record = NULL;
+static volatile bool playing = false;
+// Internal RAM bounce buffer so I2S never DMA-reads from PSRAM (causes dropouts).
+static uint8_t play_ram[2048];
 
 void audio_bsp_init(void)
 {
@@ -51,7 +56,7 @@ void audio_play_init(void)
     return;
   }
 
-  esp_codec_dev_set_out_vol(playback, 100.0);
+  esp_codec_dev_set_out_vol(playback, 82.0);
 
   esp_codec_dev_sample_info_t out_fs = {};
   out_fs.sample_rate = 16000;
@@ -86,8 +91,40 @@ void audio_playback_read(void *data_ptr, uint32_t len)
 
 void audio_playback_write(void *data_ptr, uint32_t len)
 {
-  if (playback == NULL) {
+  if (playback == NULL || data_ptr == NULL || len == 0) {
     return;
   }
-  esp_codec_dev_write(playback, data_ptr, len);
+
+  uint8_t *src = (uint8_t *)data_ptr;
+  while (len > 0) {
+    uint32_t n = len;
+    if (n > sizeof(play_ram)) {
+      n = sizeof(play_ram);
+    }
+    n &= ~3u;
+    if (n == 0) {
+      break;
+    }
+    memcpy(play_ram, src, n);
+    int ret = esp_codec_dev_write(playback, play_ram, n);
+    if (ret != ESP_CODEC_DEV_OK) {
+      vTaskDelay(1);
+      ret = esp_codec_dev_write(playback, play_ram, n);
+    }
+    if (ret != ESP_CODEC_DEV_OK) {
+      ESP_LOGW(TAG, "I2S write dropped %u bytes", n);
+    }
+    src += n;
+    len -= n;
+  }
+}
+
+void audio_set_playing(bool on)
+{
+  playing = on;
+}
+
+bool audio_is_playing(void)
+{
+  return playing;
 }

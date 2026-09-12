@@ -68,24 +68,16 @@ static void play_pcm(const uint8_t *data, uint32_t len, uint32_t src_channels)
 {
   src_channels = src_channels == 0 ? 1 : src_channels;
   if (src_channels >= kPlayChannels) {
-    uint32_t offset = 0;
-    while (offset < len) {
-      uint32_t n = len - offset;
-      if (n > kChunkBytes) {
-        n = kChunkBytes;
-      }
-      audio_playback_write((void *)(data + offset), n);
-      offset += n;
-    }
+    audio_playback_write((void *)data, len);
     return;
   }
 
-  uint8_t stereo[kChunkBytes * 2];
+  uint8_t stereo[512];
   uint32_t offset = 0;
-  while (offset < len) {
+  while (offset + 2 <= len) {
     uint32_t frames = (len - offset) / 2;
-    if (frames > kChunkBytes / 2) {
-      frames = kChunkBytes / 2;
+    if (frames > 128) {
+      frames = 128;
     }
     const int16_t *src = (const int16_t *)(data + offset);
     int16_t *dst = (int16_t *)stereo;
@@ -208,7 +200,9 @@ static bool handle_clip(uint8_t *data, uint32_t len)
     return false;
   }
 
+  audio_set_playing(true);
   play_pcm(data, spoken, src_channels ? src_channels : kPlayChannels);
+  audio_set_playing(false);
   return true;
 }
 

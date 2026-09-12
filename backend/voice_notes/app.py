@@ -998,7 +998,7 @@ def append_to_doc_later(text: str) -> None:
     threading.Thread(target=_run, daemon=True).start()
 
 
-def _boost_pcm16(mono: bytes, gain: float = 2.4) -> bytes:
+def _boost_pcm16(mono: bytes, gain: float = 1.2) -> bytes:
     samples = array.array("h")
     samples.frombytes(mono[: len(mono) - (len(mono) % 2)])
     for i, sample in enumerate(samples):
