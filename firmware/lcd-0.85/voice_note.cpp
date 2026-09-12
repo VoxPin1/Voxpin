@@ -5,6 +5,8 @@
 #include <WiFiClient.h>
 #include <WiFiClientSecure.h>
 #include <stdio.h>
+#include <stdint.h>
+#include <string.h>
 
 #include "audio_bsp.h"
 #include "backend_http.h"
@@ -18,12 +20,14 @@
 static const char *TAG = "voice_note";
 
 static constexpr uint32_t kSampleRate = 16000;
-static constexpr uint32_t kChannels = 2;
+static constexpr uint32_t kChannels = 1;
+static constexpr uint32_t kPlayChannels = 2;
 static constexpr uint32_t kBits = 16;
 static constexpr uint32_t kBytesPerSec = kSampleRate * kChannels * (kBits / 8);
 static constexpr uint32_t kChunkBytes = 4096;
 static constexpr uint32_t kMaxSeconds = 20;
-static constexpr uint32_t kMaxBytes = kBytesPerSec * kMaxSeconds;
+static constexpr uint32_t kMaxRecordBytes = kBytesPerSec * kMaxSeconds;
+static constexpr uint32_t kMaxBytes = kSampleRate * kPlayChannels * (kBits / 8) * kMaxSeconds;
 static constexpr uint32_t kMinBytes = kBytesPerSec / 4;
 static constexpr uint32_t kHoldToTalkMs = 400;
 static constexpr uint32_t kClickAutoSendMs = 8000;
@@ -60,16 +64,37 @@ static void show_status(const char *text, uint32_t hold_ms)
   }
 }
 
-static void play_pcm(const uint8_t *data, uint32_t len)
+static void play_pcm(const uint8_t *data, uint32_t len, uint32_t src_channels)
 {
+  src_channels = src_channels == 0 ? 1 : src_channels;
+  if (src_channels >= kPlayChannels) {
+    uint32_t offset = 0;
+    while (offset < len) {
+      uint32_t n = len - offset;
+      if (n > kChunkBytes) {
+        n = kChunkBytes;
+      }
+      audio_playback_write((void *)(data + offset), n);
+      offset += n;
+    }
+    return;
+  }
+
+  uint8_t stereo[kChunkBytes * 2];
   uint32_t offset = 0;
   while (offset < len) {
-    uint32_t n = len - offset;
-    if (n > kChunkBytes) {
-      n = kChunkBytes;
+    uint32_t frames = (len - offset) / 2;
+    if (frames > kChunkBytes / 2) {
+      frames = kChunkBytes / 2;
     }
-    audio_playback_write((void *)(data + offset), n);
-    offset += n;
+    const int16_t *src = (const int16_t *)(data + offset);
+    int16_t *dst = (int16_t *)stereo;
+    for (uint32_t i = 0; i < frames; i++) {
+      dst[i * 2] = src[i];
+      dst[i * 2 + 1] = src[i];
+    }
+    audio_playback_write(stereo, frames * 4);
+    offset += frames * 2;
   }
 }
 
@@ -126,16 +151,17 @@ static bool handle_clip(uint8_t *data, uint32_t len)
 
   http.addHeader("Content-Type", "application/octet-stream");
   http.addHeader("X-Sample-Rate", "16000");
-  http.addHeader("X-Channels", "2");
+  http.addHeader("X-Channels", "1");
   http.addHeader("X-Bits", "16");
-  const char *header_keys[] = {"X-Action", "X-Status"};
-  http.collectHeaders(header_keys, 2);
+  const char *header_keys[] = {"X-Action", "X-Status", "X-Channels"};
+  http.collectHeaders(header_keys, 3);
 
   int code = http.POST(data, len);
   String pin_status = http.header("X-Status");
   if (code == 204) {
     http.end();
-    return true;
+    show_status("Didn't hear", 2500);
+    return false;
   }
   if (code == 200) {
     String action = http.header("X-Action");
@@ -174,6 +200,7 @@ static bool handle_clip(uint8_t *data, uint32_t len)
 
   show_status(pin_status.length() ? pin_status.c_str() : "Speaking", 0);
   uint32_t spoken = read_response(http, data, kMaxBytes);
+  uint32_t src_channels = (uint32_t)http.header("X-Channels").toInt();
   http.end();
 
   if (spoken < 2048) {
@@ -181,7 +208,7 @@ static bool handle_clip(uint8_t *data, uint32_t len)
     return false;
   }
 
-  play_pcm(data, spoken);
+  play_pcm(data, spoken, src_channels ? src_channels : kPlayChannels);
   return true;
 }
 
@@ -203,11 +230,12 @@ static void voice_note_task(void *arg)
     }
 
     show_status("Recording", 0);
+    memset(audio_buf, 0, kMaxBytes);
     uint32_t written = 0;
     const uint32_t press_started = millis();
     bool saw_release = false;
 
-    while (written + kChunkBytes <= kMaxBytes) {
+    while (written + kChunkBytes <= kMaxRecordBytes) {
       audio_playback_read(audio_buf + written, kChunkBytes);
       written += kChunkBytes;
 
@@ -235,7 +263,7 @@ static void voice_note_task(void *arg)
       continue;
     }
 
-    show_status("Sending", 1800);
+    show_status("Sending", 0);
     handle_clip(audio_buf, written);
     show_status("", 0);
   }

@@ -16,3 +16,4 @@ backend/voice_notes/apps_script_secret.txt
 backend/voice_notes/voxpin_data.json
 backend/voice_notes/voxpin_data.json.tmp
 backend/voice_notes/translate_cache.json
+backend/voice_notes/last_clip.wav

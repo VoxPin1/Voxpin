@@ -1,5 +1,7 @@
 #include "audio_bsp.h"
 
+#include "board_pins.h"
+#include "driver/gpio.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -14,6 +16,15 @@ static esp_codec_dev_handle_t record = NULL;
 
 void audio_bsp_init(void)
 {
+  gpio_config_t pa = {};
+  pa.intr_type = GPIO_INTR_DISABLE;
+  pa.mode = GPIO_MODE_OUTPUT;
+  pa.pin_bit_mask = 1ULL << PA_CTRL_PIN;
+  pa.pull_up_en = GPIO_PULLUP_DISABLE;
+  pa.pull_down_en = GPIO_PULLDOWN_DISABLE;
+  gpio_config(&pa);
+  gpio_set_level((gpio_num_t)PA_CTRL_PIN, 1);
+
   set_codec_board_type("S3_LCD_0_85");
   if (init_i2c(0) != 0) {
     ESP_LOGE(TAG, "i2c init failed");
@@ -40,8 +51,7 @@ void audio_play_init(void)
     return;
   }
 
-  esp_codec_dev_set_out_vol(playback, 80.0);
-  esp_codec_dev_set_in_gain(record, 40.0);
+  esp_codec_dev_set_out_vol(playback, 100.0);
 
   esp_codec_dev_sample_info_t out_fs = {};
   out_fs.sample_rate = 16000;
@@ -51,19 +61,19 @@ void audio_play_init(void)
     ESP_LOGE(TAG, "playback open failed");
   }
 
+  // Match Waveshare factory: 4-slot TDM, keep MIC1 (slot 0) as mono.
   esp_codec_dev_sample_info_t in_fs = {};
   in_fs.sample_rate = 16000;
-  in_fs.channel = 2;
+  in_fs.channel = 4;
   in_fs.bits_per_sample = 16;
   in_fs.channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0);
   if (esp_codec_dev_open(record, &in_fs) != ESP_CODEC_DEV_OK) {
-    ESP_LOGW(TAG, "record open with 2ch failed, trying 4ch TDM");
-    in_fs.channel = 4;
-    in_fs.channel_mask = ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0);
-    if (esp_codec_dev_open(record, &in_fs) != ESP_CODEC_DEV_OK) {
-      ESP_LOGE(TAG, "record open failed");
-    }
+    ESP_LOGE(TAG, "record open failed");
+    return;
   }
+  esp_codec_dev_set_in_channel_gain(record, ESP_CODEC_DEV_MAKE_CHANNEL_MASK(0), 37.5);
+  esp_codec_dev_set_in_gain(record, 40.0);
+  ESP_LOGI(TAG, "record open: 4ch TDM slot0 mono");
 }
 
 void audio_playback_read(void *data_ptr, uint32_t len)

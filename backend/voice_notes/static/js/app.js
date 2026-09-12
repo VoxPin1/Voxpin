@@ -16,6 +16,10 @@
     "https://www.googleapis.com/auth/documents.readonly",
   ].join(" ");
   const DEFAULT_DOC_ID = "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8";
+  const DEFAULT_DOC_URL = `https://docs.google.com/document/d/${DEFAULT_DOC_ID}/edit?tab=t.0`;
+  const CALENDAR_ID = "riangadey12@gmail.com";
+  const CALENDAR_URL =
+    "https://calendar.google.com/calendar/u/0?cid=cmlhbmdhZGV5MTJAZ21haWwuY29t";
   const FALLBACK_LANGUAGES = [
     { code: "en", name: "English", native: "English" },
     { code: "te", name: "Telugu", native: "తెలుగు" },
@@ -97,6 +101,8 @@
     calNote: document.getElementById("calNote"),
     googleStatus: document.getElementById("googleStatus"),
     googleDocLink: document.getElementById("googleDocLink"),
+    googleCalLink: document.getElementById("googleCalLink"),
+    googleCalLink: document.getElementById("googleCalLink"),
     googleSignInBtn: document.getElementById("googleSignInBtn"),
     googleSignInHint: document.getElementById("googleSignInHint"),
     googleSignOut: document.getElementById("googleSignOut"),
@@ -389,7 +395,7 @@
       maxResults: "100",
     });
     const res = await fetch(
-      `https://www.googleapis.com/calendar/v3/calendars/primary/events?${params}`,
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(CALENDAR_ID)}/events?${params}`,
       { headers: { Authorization: `Bearer ${state.google.accessToken}` } }
     );
     if (res.status === 401) {
@@ -406,7 +412,7 @@
     state.calendarConnected = true;
     state.events = (data.items || []).map(mapGoogleEvent);
     if (!state.selectedDate) state.selectedDate = dayKey(new Date());
-    els.calNote.textContent = "Showing your Google Calendar.";
+    els.calNote.textContent = "Showing riangadey12@gmail.com.";
     renderCalendar();
     return true;
   }
@@ -515,11 +521,13 @@
     return res.json();
   }
 
+  function setPinnedGoogleLinks(docUrl, calUrl) {
+    if (els.googleDocLink) els.googleDocLink.href = docUrl || DEFAULT_DOC_URL;
+    if (els.googleCalLink) els.googleCalLink.href = calUrl || CALENDAR_URL;
+  }
+
   async function loadNotesFromGoogleDoc() {
     const docId = DEFAULT_DOC_ID;
-    if (els.googleDocLink) {
-      els.googleDocLink.href = `https://docs.google.com/document/d/${docId}/edit`;
-    }
     const doc = await googleGet(
       `https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}?includeTabsContent=true`
     );
@@ -893,9 +901,7 @@
           <li><strong>Google Drive notes:</strong> ${escapeHtml(drive)}</li>
           <li><strong>Calendar:</strong> ${escapeHtml(cal)}</li>
         </ul>`;
-      if (els.googleDocLink) {
-        els.googleDocLink.href = `https://docs.google.com/document/d/${DEFAULT_DOC_ID}/edit`;
-      }
+      setPinnedGoogleLinks(DEFAULT_DOC_URL, CALENDAR_URL);
       return;
     }
 
@@ -917,9 +923,7 @@
           <li><strong>Docs (Apps Script):</strong> ${escapeHtml(apps)} · ${escapeHtml(docs)}</li>
           <li><strong>Pin backend Calendar:</strong> ${escapeHtml(oauth)} · ${escapeHtml(flaskCal)}</li>
         </ul>`;
-      if (els.googleDocLink && data.document_url) {
-        els.googleDocLink.href = data.document_url;
-      }
+      setPinnedGoogleLinks(data.document_url, data.calendar_url);
       const connectBtn = document.getElementById("connectGoogle");
       if (connectBtn) {
         if (data.calendar) {

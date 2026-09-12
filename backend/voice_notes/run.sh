@@ -14,4 +14,5 @@ if [[ -n "${LAN_IP}" ]]; then
   echo "Firmware backend_config.h should use: ${LAN_IP}"
 fi
 
+export PYTHONUNBUFFERED=1
 exec .venv/bin/python app.py "$@"

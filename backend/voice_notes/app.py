@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import array
 import audioop
 import base64
 import io
@@ -11,6 +12,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import wave
 from datetime import datetime, timedelta, timezone
 
@@ -29,8 +31,16 @@ WEBHOOK_SECRET_PATH = os.path.join(DIR, "apps_script_secret.txt")
 DOCUMENT_ID = os.environ.get(
     "VOXPIN_DOCUMENT_ID", "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8"
 )
+DOCUMENT_URL = os.environ.get(
+    "VOXPIN_DOCUMENT_URL",
+    f"https://docs.google.com/document/d/{DOCUMENT_ID}/edit?tab=t.0",
+)
 # Primary calendar for reminders + companion month view (from your Calendar share link).
 CALENDAR_ID = os.environ.get("VOXPIN_CALENDAR_ID", "riangadey12@gmail.com")
+CALENDAR_URL = os.environ.get(
+    "VOXPIN_CALENDAR_URL",
+    "https://calendar.google.com/calendar/u/0?cid=cmlhbmdhZGV5MTJAZ21haWwuY29t",
+)
 DOC_SCOPES = ["https://www.googleapis.com/auth/documents"]
 CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 SCOPES = CALENDAR_SCOPES  # reminders / next-event / companion calendar
@@ -300,8 +310,14 @@ def create_calendar_event(title: str, start: datetime) -> dict:
         "reminders": {"useDefault": False, "overrides": [{"method": "popup", "minutes": 0}]},
     }
     created = service.events().insert(calendarId=CALENDAR_ID, body=body).execute()
+    if start.date() == now_local().date():
+        when_label = start.strftime("%-I:%M %p")
+    elif start.date() == now_local().date() + timedelta(days=1):
+        when_label = start.strftime("Tomorrow %-I:%M %p")
+    else:
+        when_label = start.strftime("%a %-I:%M %p")
     return {
-        "when": start.strftime("%-I:%M %p"),
+        "when": when_label,
         "title": title,
         "id": created.get("id", ""),
     }
@@ -355,10 +371,60 @@ def append_to_doc(text: str) -> None:
     ).execute()
 
 
+def pcm_stats(pcm: bytes, sample_width: int = 2) -> dict:
+    if sample_width != 2 or len(pcm) < 2:
+        return {"bytes": len(pcm), "rms": 0, "peak": 0, "frames": 0}
+    samples = array.array("h")
+    samples.frombytes(pcm[: len(pcm) - (len(pcm) % 2)])
+    if not samples:
+        return {"bytes": len(pcm), "rms": 0, "peak": 0, "frames": 0}
+    peak = max(abs(sample) for sample in samples)
+    rms = int((sum(sample * sample for sample in samples) / len(samples)) ** 0.5)
+    return {"bytes": len(pcm), "rms": rms, "peak": peak, "frames": len(samples)}
+
+
+def extract_channel(pcm: bytes, channels: int, index: int, sample_width: int = 2) -> bytes:
+    if channels <= 1:
+        return pcm
+    frame = channels * sample_width
+    offset = index * sample_width
+    out = bytearray()
+    for i in range(0, len(pcm) - frame + 1, frame):
+        out.extend(pcm[i + offset : i + offset + sample_width])
+    return bytes(out)
+
+
+def loudest_mono(pcm: bytes, channels: int, sample_width: int = 2) -> tuple[bytes, int]:
+    if channels <= 1:
+        return pcm, 0
+    best = pcm
+    best_rms = -1
+    best_ch = 0
+    for channel in range(channels):
+        mono = extract_channel(pcm, channels, channel, sample_width)
+        rms = pcm_stats(mono, sample_width)["rms"]
+        if rms > best_rms:
+            best_rms = rms
+            best = mono
+            best_ch = channel
+    return best, best_ch
+
+
+def amplify_pcm(pcm: bytes, sample_width: int = 2, target_peak: int = 12000) -> bytes:
+    stats = pcm_stats(pcm, sample_width)
+    if stats["peak"] < 80:
+        return pcm
+    if stats["peak"] >= target_peak:
+        return pcm
+    factor = min(16.0, target_peak / max(stats["peak"], 1))
+    return audioop.mul(pcm, sample_width, factor)
+
+
 def pcm_to_wav(pcm: bytes, sample_rate: int, channels: int, sample_width: int) -> bytes:
-    if channels == 2:
-        pcm = audioop.tomono(pcm, sample_width, 0.5, 0.5)
+    if channels > 1:
+        pcm, _ = loudest_mono(pcm, channels, sample_width)
         channels = 1
+    pcm = amplify_pcm(pcm, sample_width)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(channels)
@@ -456,7 +522,8 @@ TRANSLATE_PREFIX = re.compile(
 )
 REMIND_PREFIX = re.compile(
     r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?"
-    r"(?:remind\s+me(?:\s+to)?|set\s+(?:a\s+)?reminder(?:\s+to|\s+for)?|add\s+(?:a\s+)?(?:reminder|event))\b"
+    r"(?:remind\s+me(?:\s+to)?|set\s+(?:a\s+)?reminder(?:\s+to|\s+for)?|"
+    r"add\s+(?:a\s+)?(?:reminder|event)|reminder(?:\s+to|\s+for)?)\b"
     r"[\s,.:;!\-]*",
     re.IGNORECASE,
 )
@@ -515,6 +582,32 @@ AT_MIDNIGHT = re.compile(r"\bat\s+midnight\b", re.IGNORECASE)
 TOMORROW = re.compile(r"\btomorrow\b", re.IGNORECASE)
 TODAY = re.compile(r"\btoday\b", re.IGNORECASE)
 TONIGHT = re.compile(r"\btonight\b", re.IGNORECASE)
+WEEKDAY_INDEX = {
+    "monday": 0,
+    "mon": 0,
+    "tuesday": 1,
+    "tue": 1,
+    "tues": 1,
+    "wednesday": 2,
+    "wed": 2,
+    "thursday": 3,
+    "thu": 3,
+    "thur": 3,
+    "thurs": 3,
+    "friday": 4,
+    "fri": 4,
+    "saturday": 5,
+    "sat": 5,
+    "sunday": 6,
+    "sun": 6,
+}
+WEEKDAY_PHRASE = re.compile(
+    r"\b(?:on\s+)?(?:(this|next)\s+)?("
+    r"monday|mon|tuesday|tues|tue|wednesday|wed|"
+    r"thursday|thurs|thur|thu|friday|fri|saturday|sat|sunday|sun"
+    r")\b",
+    re.IGNORECASE,
+)
 WORD_HOUR = {
     "one": 1,
     "two": 2,
@@ -565,6 +658,14 @@ def _soonest_clock(
     return now + timedelta(hours=1)
 
 
+def _weekday_start(now: datetime, weekday: int, qualifier: str | None) -> datetime:
+    """Return midnight of the spoken weekday. 'next Tuesday' skips today."""
+    days_ahead = (weekday - now.weekday()) % 7
+    if (qualifier or "").lower() == "next" and days_ahead == 0:
+        days_ahead = 7
+    return now.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=days_ahead)
+
+
 def _hours_from_clock(hour: int, ampm: str) -> list[int]:
     ampm = (ampm or "").lower().replace(".", "")
     if ampm.startswith("p"):
@@ -578,11 +679,25 @@ def _hours_from_clock(hour: int, ampm: str) -> list[int]:
 
 def parse_reminder(text: str) -> tuple[str, datetime]:
     now = now_local()
-    tomorrow = bool(TOMORROW.search(text))
-    today = bool(TODAY.search(text)) and not tomorrow
-    leftover = TOMORROW.sub(" ", text)
+    leftover = text
+    weekday_match = WEEKDAY_PHRASE.search(leftover)
+    weekday_start = None
+    if weekday_match:
+        weekday_start = _weekday_start(
+            now,
+            WEEKDAY_INDEX[weekday_match.group(2).lower()],
+            weekday_match.group(1),
+        )
+        leftover = WEEKDAY_PHRASE.sub(" ", leftover, count=1)
+
+    tomorrow = bool(TOMORROW.search(leftover))
+    today = bool(TODAY.search(leftover)) and not tomorrow
+    leftover = TOMORROW.sub(" ", leftover)
     leftover = TODAY.sub(" ", leftover)
-    day = "tomorrow" if tomorrow else ("today" if today else "soonest")
+    if weekday_start is not None:
+        day = "today" if weekday_start.date() == now.date() else "soonest"
+    else:
+        day = "tomorrow" if tomorrow else ("today" if today else "soonest")
 
     when = now + timedelta(hours=1)
     timed = False
@@ -646,10 +761,20 @@ def parse_reminder(text: str) -> tuple[str, datetime]:
         when = _soonest_clock(now, [9], 0, "today")
 
     leftover = TONIGHT.sub(" ", leftover)
+    leftover = re.sub(r"\bon\b", " ", leftover, flags=re.I)
     title = re.sub(r"\s+", " ", leftover).strip(" ,.-")
     title = re.sub(r"^(?:(?:to|for)\s+|\.\s*)+", "", title, flags=re.I).strip(" ,.-")
     if not title:
         title = "Reminder"
+
+    if weekday_start is not None:
+        when = weekday_start.replace(
+            hour=when.hour, minute=when.minute, second=0, microsecond=0
+        )
+        if when <= now:
+            when += timedelta(days=7)
+        if not timed:
+            when = when.replace(hour=9, minute=0)
     return title, when
 
 
@@ -678,6 +803,9 @@ def parse_command(transcript: str) -> tuple[str | None, str]:
         return "timer", text[match.end() :].strip(" ,.-")
     if MORE_MINUTES_PREFIX.match(text):
         return "timer", text
+    if text:
+        # Bare recordings (no command phrase) still go to the Google Doc as notes.
+        return "note", text
     return None, text
 
 
@@ -860,14 +988,34 @@ def translate_from_english(text: str, target_lang: str) -> str:
     return translate_text(text, "en", target_lang)
 
 
+def append_to_doc_later(text: str) -> None:
+    def _run() -> None:
+        try:
+            append_to_doc(text)
+        except Exception as err:
+            print(f"note saved locally only (Docs error): {err}", flush=True)
+
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def _boost_pcm16(mono: bytes, gain: float = 2.4) -> bytes:
+    samples = array.array("h")
+    samples.frombytes(mono[: len(mono) - (len(mono) % 2)])
+    for i, sample in enumerate(samples):
+        value = int(sample * gain)
+        if value > 32767:
+            value = 32767
+        elif value < -32767:
+            value = -32767
+        samples[i] = value
+    return samples.tobytes()
+
+
 def _upmix_mono_pcm(mono: bytes, channels: int) -> bytes:
     if channels <= 1:
         return mono
-    # Duplicate each 16-bit sample across channels.
-    import array
-
     samples = array.array("h")
-    samples.frombytes(mono)
+    samples.frombytes(mono[: len(mono) - (len(mono) % 2)])
     out = array.array("h")
     for sample in samples:
         for _ in range(channels):
@@ -891,7 +1039,7 @@ def _tts_macos_wav(text: str, lang: str, sample_rate: int) -> bytes | None:
         aiff_path = tempfile.NamedTemporaryFile(suffix=".aiff", delete=False).name
         wav_path = tempfile.NamedTemporaryFile(suffix=".wav", delete=False).name
         say = subprocess.run(
-            ["say", "-v", voice, "-o", aiff_path, text],
+            ["say", "-v", voice, "-r", "155", "-o", aiff_path, text],
             capture_output=True,
             timeout=12,
         )
@@ -935,17 +1083,18 @@ def tts_mp3_bytes(text: str, lang: str) -> bytes:
 
 
 def speak_translated_pcm(text: str, lang: str, sample_rate: int, channels: int) -> bytes:
-    """Synthesize speech as PCM matching the pin's sample format."""
+    """Synthesize speech as PCM matching the pin speaker (stereo)."""
     text = (text or "").strip()
     if not text:
         return b""
+    play_channels = max(2, channels)
 
     # Prefer offline macOS voices — avoids slow/flaky gTTS network round-trips.
     wav_bytes = _tts_macos_wav(text, lang, sample_rate)
     if wav_bytes:
         with wave.open(io.BytesIO(wav_bytes), "rb") as handle:
             mono = handle.readframes(handle.getnframes())
-        return _upmix_mono_pcm(mono, channels)
+        return _upmix_mono_pcm(_boost_pcm16(mono), play_channels)
 
     import miniaudio
 
@@ -955,7 +1104,7 @@ def speak_translated_pcm(text: str, lang: str, sample_rate: int, channels: int) 
         nchannels=1,
         sample_rate=sample_rate,
     )
-    return _upmix_mono_pcm(decoded.samples.tobytes(), channels)
+    return _upmix_mono_pcm(_boost_pcm16(decoded.samples.tobytes()), play_channels)
 
 
 def json_action(action: str, *, status: str | None = None, **payload):
@@ -1020,7 +1169,9 @@ def api_google_status():
             "has_apps_script": bool(webhook_config()),
             "has_token": os.path.exists(TOKEN_PATH),
             "document_id": DOCUMENT_ID,
-            "document_url": f"https://docs.google.com/document/d/{DOCUMENT_ID}/edit",
+            "document_url": DOCUMENT_URL,
+            "calendar_id": CALENDAR_ID,
+            "calendar_url": CALENDAR_URL,
         }
     )
 
@@ -1216,6 +1367,7 @@ def api_calendar():
                 "events": [],
                 "message": "Connect Google Calendar with ./run.sh --login",
                 "calendar_id": CALENDAR_ID,
+                "calendar_url": CALENDAR_URL,
             }
         )
     try:
@@ -1230,6 +1382,7 @@ def api_calendar():
             "events": events,
             "timezone": TIMEZONE,
             "calendar_id": CALENDAR_ID,
+            "calendar_url": CALENDAR_URL,
         }
     )
 
@@ -1326,15 +1479,24 @@ def note():
         # Always STT in English so Language-tab picks don't break recognition.
         source = "en"
         wav_bytes = pcm_to_wav(pcm, sample_rate, channels, sample_width)
+        stats = pcm_stats(pcm, sample_width)
+        print(
+            f"clip: {len(pcm)} bytes ch={channels} rms={stats['rms']} peak={stats['peak']}",
+            flush=True,
+        )
+        last_wav = os.path.join(DIR, "last_clip.wav")
+        with open(last_wav, "wb") as handle:
+            handle.write(wav_bytes)
         transcript = transcribe(wav_bytes, language=source).strip()
         action, text = parse_command(transcript)
+        print(f"heard: {transcript!r} -> {action}", flush=True)
         if action is None:
-            print(f"ignored: {transcript!r}")
+            print(f"ignored: {transcript!r}", flush=True)
             resp = Response(status=204)
             resp.headers["X-Action"] = "none"
             return resp
         if not text and action not in {"translate", "location", "sos", "weather"}:
-            print(f"ignored empty: {transcript!r}")
+            print(f"ignored empty: {transcript!r}", flush=True)
             resp = Response(status=204)
             resp.headers["X-Action"] = "none"
             return resp
@@ -1350,7 +1512,7 @@ def note():
                 docs_ok = False
                 print(f"note saved locally only (Docs error): {err}")
             store.add_recording("note", text)
-            print(f"note: {text}")
+            print(f"note: {text}", flush=True)
             # Always treat local save as success so the pin doesn't look broken
             # when Google Docs isn't linked yet.
             if not docs_ok:
@@ -1364,7 +1526,7 @@ def note():
             title, when = parse_reminder(text)
             created = create_calendar_event(title, when)
             store.add_recording("task", title, when=created["when"])
-            print(f"remind: {created['when']} {title}")
+            print(f"remind: {created['when']} {title}", flush=True)
             return json_action("remind", status="Reminded", text=title, when=created["when"])
 
         if action == "timer":
@@ -1393,14 +1555,14 @@ def note():
             loc = family.geolocate()
             summary = family.weather_summary(loc["lat"], loc["lon"])
             store.add_recording("weather", summary["spoken"], when=loc.get("place"))
-            spoken = speak_translated_pcm(summary["spoken"], "en", sample_rate, channels)
+            spoken = speak_translated_pcm(summary["spoken"], "en", sample_rate, 2)
             if not spoken:
                 return json_action("weather", status=summary["status"], text=summary["spoken"])
             resp = Response(spoken, mimetype="application/octet-stream")
             resp.headers["X-Action"] = "weather"
             resp.headers["X-Status"] = summary["status"]
             resp.headers["X-Sample-Rate"] = str(sample_rate)
-            resp.headers["X-Channels"] = str(channels)
+            resp.headers["X-Channels"] = "2"
             resp.headers["X-Bits"] = "16"
             resp.status_code = 201
             return resp
@@ -1413,11 +1575,11 @@ def note():
                 "es": "Di translate this y luego la frase.",
                 "en": "Say translate this, then the phrase.",
             }.get(target.split("-")[0], "Say translate this, then the phrase.")
-            spoken = speak_translated_pcm(prompt, target, sample_rate, channels)
+            spoken = speak_translated_pcm(prompt, target, sample_rate, 2)
             resp = Response(spoken, mimetype="application/octet-stream")
             resp.headers["X-Action"] = "translate"
             resp.headers["X-Sample-Rate"] = str(sample_rate)
-            resp.headers["X-Channels"] = str(channels)
+            resp.headers["X-Channels"] = "2"
             resp.headers["X-Bits"] = "16"
             resp.headers["X-Language"] = target
             resp.status_code = 201
@@ -1428,7 +1590,7 @@ def note():
         t1 = datetime.now(timezone.utc)
         if not translated:
             return jsonify({"ok": False, "error": "empty translation"}), 500
-        spoken = speak_translated_pcm(translated, target, sample_rate, channels)
+        spoken = speak_translated_pcm(translated, target, sample_rate, 2)
         t2 = datetime.now(timezone.utc)
         if not spoken:
             return jsonify({"ok": False, "error": "empty speech"}), 500
@@ -1438,10 +1600,7 @@ def note():
             translation=translated,
             language=target_name,
         )
-        try:
-            append_to_doc(f"Translate ({target_name}): {text} → {translated}")
-        except Exception as err:
-            print(f"translate saved locally only (Docs error): {err}")
+        append_to_doc_later(f"Translate ({target_name}): {text} → {translated}")
         print(f"{source.upper()}: {text}")
         print(f"{target.upper()}: {translated}")
         print(
@@ -1451,7 +1610,7 @@ def note():
         resp = Response(spoken, mimetype="application/octet-stream")
         resp.headers["X-Action"] = "translate"
         resp.headers["X-Sample-Rate"] = str(sample_rate)
-        resp.headers["X-Channels"] = str(channels)
+        resp.headers["X-Channels"] = "2"
         resp.headers["X-Bits"] = "16"
         resp.headers["X-Language"] = target
         resp.status_code = 201
