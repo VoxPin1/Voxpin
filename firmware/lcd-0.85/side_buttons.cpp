@@ -85,29 +85,41 @@ static bool post_event(const char *path, const char *ok_status)
   char body[640];
   scan_wifi_json(body, sizeof(body));
 
-  WiFiClientSecure tls;
-  WiFiClient plain;
-  HTTPClient http;
-  http.setTimeout(30000);
-  if (!backend_http_begin(http, tls, plain, path)) {
-    set_status("Send failed", 2500);
+  bool tried_cloud = false;
+  for (;;) {
+    WiFiClientSecure tls;
+    WiFiClient plain;
+    HTTPClient http;
+    http.setTimeout(30000);
+    if (!backend_http_begin(http, tls, plain, path)) {
+      http.end();
+      if (!tried_cloud && backend_fallback_cloud()) {
+        tried_cloud = true;
+        continue;
+      }
+      set_status("Send failed", 2500);
+      return false;
+    }
+    http.addHeader("Content-Type", "application/json");
+    const char *header_keys[] = {"X-Action", "X-Status"};
+    http.collectHeaders(header_keys, 2);
+    int code = http.POST((uint8_t *)body, strlen(body));
+    String status = http.header("X-Status");
+    http.end();
+    if (code < 0 && !tried_cloud && backend_fallback_cloud()) {
+      tried_cloud = true;
+      continue;
+    }
+    if (code == 200) {
+      set_status(status.length() ? status.c_str() : ok_status, 3500);
+      set_status("", 0);
+      return true;
+    }
+    ESP_LOGE(TAG, "%s HTTP %d", path, code);
+    set_status(code < 0 ? "No server" : "Send failed", 2500);
+    set_status("", 0);
     return false;
   }
-  http.addHeader("Content-Type", "application/json");
-  const char *header_keys[] = {"X-Action", "X-Status"};
-  http.collectHeaders(header_keys, 2);
-  int code = http.POST((uint8_t *)body, strlen(body));
-  String status = http.header("X-Status");
-  http.end();
-  if (code == 200) {
-    set_status(status.length() ? status.c_str() : ok_status, 3500);
-    set_status("", 0);
-    return true;
-  }
-  ESP_LOGE(TAG, "%s HTTP %d", path, code);
-  set_status(code < 0 ? "No server" : "Send failed", 2500);
-  set_status("", 0);
-  return false;
 }
 
 static void side_buttons_task(void *arg)

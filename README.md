@@ -1,6 +1,8 @@
 # VoxPin
 
-ESP32-S3 e-paper (Waveshare 1.54") firmware and tooling.
+Voice pin firmware for **Waveshare ESP32-S3-LCD-0.85**, plus a Mac helper for notes, translation, calendar, and SOS iMessage.
+
+**New pin:** plug it in, run `./setup.sh`, type Wi-Fi name, Wi-Fi password, and the SOS phone number. Details: [SETUP.md](SETUP.md).
 
 ## Companion website
 

@@ -46,6 +46,9 @@ fi
 if [[ -f apps_script_secret.txt ]]; then
   printf 'VOXPIN_APPS_SCRIPT_SECRET=%s\n' "$(tr -d '\n' < apps_script_secret.txt)" >> "$SECRET_FILE"
 fi
+if [[ -f voxpin_data.json ]]; then
+  printf 'VOXPIN_DATA_B64=%s\n' "$(b64 voxpin_data.json)" >> "$SECRET_FILE"
+fi
 
 if [[ -s "$SECRET_FILE" ]]; then
   echo "Setting Fly secrets from local credential files (values not printed)."

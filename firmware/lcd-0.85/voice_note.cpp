@@ -199,80 +199,93 @@ static bool handle_clip(uint8_t *data, uint32_t len)
     return false;
   }
 
-  WiFiClientSecure tls;
-  WiFiClient plain;
-  HTTPClient http;
-  http.setTimeout(90000);
-  if (!backend_http_begin(http, tls, plain, "/note")) {
-    show_status("Send failed", 2500);
-    return false;
-  }
-
-  http.addHeader("Content-Type", "application/octet-stream");
-  http.addHeader("X-Sample-Rate", "16000");
-  http.addHeader("X-Channels", "1");
-  http.addHeader("X-Bits", "16");
-  const char *header_keys[] = {"X-Action", "X-Status", "X-Channels"};
-  http.collectHeaders(header_keys, 3);
-
-  int code = http.POST(data, len);
-  String pin_status = http.header("X-Status");
-  if (code == 204) {
-    http.end();
-    show_status("Didn't hear", 2500);
-    return false;
-  }
-  if (code == 200) {
-    String action = http.header("X-Action");
-    http.end();
-    if (pin_status.length() > 0) {
-      show_status(pin_status.c_str(), 3500);
-    } else if (action == "remind") {
-      show_status("Reminded", 3500);
-    } else if (action == "timer") {
-      show_status("Timer set", 3500);
-    } else if (action == "ping") {
-      show_status("Sent loc", 3500);
-    } else if (action == "sos") {
-      show_status("Help sent", 3500);
-    } else if (action == "need_login") {
-      show_status("Sign in", 3500);
-                } else if (action == "note_local") {
-                  show_status("Saved local", 3500);
-                } else if (action == "ask") {
-                  show_status("Answered", 3500);
-                } else {
-      show_status("Saved", 3500);
+  bool tried_cloud = false;
+  for (;;) {
+    WiFiClientSecure tls;
+    WiFiClient plain;
+    HTTPClient http;
+    http.setTimeout(90000);
+    if (!backend_http_begin(http, tls, plain, "/note")) {
+      http.end();
+      if (!tried_cloud && backend_fallback_cloud()) {
+        tried_cloud = true;
+        continue;
+      }
+      show_status("Send failed", 2500);
+      return false;
     }
+
+    http.addHeader("Content-Type", "application/octet-stream");
+    http.addHeader("X-Sample-Rate", "16000");
+    http.addHeader("X-Channels", "1");
+    http.addHeader("X-Bits", "16");
+    const char *header_keys[] = {"X-Action", "X-Status", "X-Channels"};
+    http.collectHeaders(header_keys, 3);
+
+    int code = http.POST(data, len);
+    String pin_status = http.header("X-Status");
+    if (code < 0 && !tried_cloud && backend_fallback_cloud()) {
+      http.end();
+      tried_cloud = true;
+      continue;
+    }
+    if (code == 204) {
+      http.end();
+      show_status("Didn't hear", 2500);
+      return false;
+    }
+    if (code == 200) {
+      String action = http.header("X-Action");
+      http.end();
+      if (pin_status.length() > 0) {
+        show_status(pin_status.c_str(), 3500);
+      } else if (action == "remind") {
+        show_status("Reminded", 3500);
+      } else if (action == "timer") {
+        show_status("Timer set", 3500);
+      } else if (action == "ping") {
+        show_status("Sent loc", 3500);
+      } else if (action == "sos") {
+        show_status("Help sent", 3500);
+      } else if (action == "need_login") {
+        show_status("Sign in", 3500);
+      } else if (action == "note_local") {
+        show_status("Saved local", 3500);
+      } else if (action == "ask") {
+        show_status("Answered", 3500);
+      } else {
+        show_status("Saved", 3500);
+      }
+      return true;
+    }
+    if (code != 201) {
+      ESP_LOGE(TAG, "POST failed, HTTP %d", code);
+      http.end();
+      if (code < 0) {
+        show_status("No server", 2500);
+      } else {
+        char msg[24];
+        snprintf(msg, sizeof(msg), "Fail %d", code);
+        show_status(msg, 2500);
+      }
+      return false;
+    }
+
+    show_status(pin_status.length() ? pin_status.c_str() : "Speaking", 0);
+    uint32_t spoken = read_response(http, data, kMaxBytes);
+    uint32_t src_channels = (uint32_t)http.header("X-Channels").toInt();
+    http.end();
+
+    if (spoken < 2048) {
+      show_status("Speak failed", 2500);
+      return false;
+    }
+
+    audio_set_playing(true);
+    play_pcm(data, spoken, src_channels ? src_channels : kPlayChannels);
+    audio_set_playing(false);
     return true;
   }
-  if (code != 201) {
-    ESP_LOGE(TAG, "POST failed, HTTP %d", code);
-    http.end();
-    if (code < 0) {
-      show_status("No server", 2500);
-    } else {
-      char msg[24];
-      snprintf(msg, sizeof(msg), "Fail %d", code);
-      show_status(msg, 2500);
-    }
-    return false;
-  }
-
-  show_status(pin_status.length() ? pin_status.c_str() : "Speaking", 0);
-  uint32_t spoken = read_response(http, data, kMaxBytes);
-  uint32_t src_channels = (uint32_t)http.header("X-Channels").toInt();
-  http.end();
-
-  if (spoken < 2048) {
-    show_status("Speak failed", 2500);
-    return false;
-  }
-
-  audio_set_playing(true);
-  play_pcm(data, spoken, src_channels ? src_channels : kPlayChannels);
-  audio_set_playing(false);
-  return true;
 }
 
 static void voice_note_task(void *arg)

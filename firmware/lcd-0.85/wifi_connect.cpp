@@ -6,6 +6,7 @@
 #include <HTTPClient.h>
 #include <WiFi.h>
 #include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <WiFiUdp.h>
 
 char g_backend_host[64] = BACKEND_HOST;
@@ -91,23 +92,58 @@ static bool try_join(const char *ssid, const char *password, uint32_t timeout_ms
   return WiFi.status() == WL_CONNECTED;
 }
 
-static bool probe_health(const char *host, int port)
+static bool probe_health(const char *host, int port, const char *scheme = "http")
 {
-  if (host == NULL || host[0] == '\0' || port <= 0) {
+  if (host == NULL || host[0] == '\0' || port <= 0 || scheme == NULL || scheme[0] == '\0') {
     return false;
   }
   char url[160];
-  snprintf(url, sizeof(url), "http://%s:%d/health", host, port);
-  WiFiClient plain;
-  HTTPClient http;
-  http.setTimeout(2000);
-  if (!http.begin(plain, url)) {
-    return false;
+  if ((port == 443 && strcmp(scheme, "https") == 0) ||
+      (port == 80 && strcmp(scheme, "http") == 0)) {
+    snprintf(url, sizeof(url), "%s://%s/health", scheme, host);
+  } else {
+    snprintf(url, sizeof(url), "%s://%s:%d/health", scheme, host, port);
   }
-  int code = http.GET();
-  http.end();
+
+  HTTPClient http;
+  const bool tls_mode = strcmp(scheme, "https") == 0;
+  http.setTimeout(tls_mode ? 6000 : 2000);
+  int code = -1;
+  if (tls_mode) {
+    WiFiClientSecure tls;
+    tls.setInsecure();
+    if (!http.begin(tls, url)) {
+      return false;
+    }
+    code = http.GET();
+    http.end();
+  } else {
+    WiFiClient plain;
+    if (!http.begin(plain, url)) {
+      return false;
+    }
+    code = http.GET();
+    http.end();
+  }
   Serial.printf("helper %s:%d -> HTTP %d\n", host, port, code);
   return code == 200;
+}
+
+bool backend_fallback_cloud()
+{
+  if (BACKEND_CLOUD_HOST[0] == '\0') {
+    return false;
+  }
+  if (strcmp(g_backend_host, BACKEND_CLOUD_HOST) == 0 &&
+      g_backend_port == BACKEND_CLOUD_PORT) {
+    return false;
+  }
+  if (!probe_health(BACKEND_CLOUD_HOST, BACKEND_CLOUD_PORT, BACKEND_CLOUD_SCHEME)) {
+    return false;
+  }
+  backend_set_target(BACKEND_CLOUD_HOST, BACKEND_CLOUD_PORT, BACKEND_CLOUD_SCHEME);
+  Serial.printf("Helper via cloud %s:%d\n", BACKEND_CLOUD_HOST, BACKEND_CLOUD_PORT);
+  return true;
 }
 
 static bool parse_beacon(const char *msg, char *host, size_t host_len, int *port)
@@ -186,6 +222,9 @@ bool backend_discover(uint32_t timeout_ms)
   }
   if (gw[0] != 0 && probe_health(gw_text, 8765)) {
     backend_set_target(gw_text, 8765, "http");
+    return true;
+  }
+  if (backend_fallback_cloud()) {
     return true;
   }
 

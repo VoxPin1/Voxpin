@@ -156,6 +156,9 @@ def hydrate_secrets_from_env() -> None:
     )
     write_text(WEBHOOK_URL_PATH, os.environ.get("VOXPIN_APPS_SCRIPT_URL"))
     write_text(WEBHOOK_SECRET_PATH, os.environ.get("VOXPIN_APPS_SCRIPT_SECRET"))
+    data_path = os.path.join(DIR, "voxpin_data.json")
+    if not os.path.exists(data_path):
+        write_b64_or_text(data_path, "VOXPIN_DATA_B64", "VOXPIN_DATA_JSON")
 
 
 hydrate_secrets_from_env()
