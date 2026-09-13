@@ -127,23 +127,27 @@ if [[ -z "$IP" ]]; then
 fi
 echo "Mac IP: $IP"
 
-LISTENERS="$(lsof -nP -iTCP:8765 -sTCP:LISTEN -t 2>/dev/null || true)"
-if [[ -n "$LISTENERS" ]]; then
-  echo "Restarting helper on port 8765…"
-  kill $LISTENERS 2>/dev/null || true
+if launchctl print "gui/$(id -u)/com.voxpin.helper" >/dev/null 2>&1; then
+  echo "Restarting always-on helper…"
+  launchctl kickstart -k "gui/$(id -u)/com.voxpin.helper"
+else
+  LISTENERS="$(lsof -nP -iTCP:8765 -sTCP:LISTEN -t 2>/dev/null || true)"
+  if [[ -n "$LISTENERS" ]]; then
+    echo "Restarting helper on port 8765…"
+    kill $LISTENERS 2>/dev/null || true
+    sleep 1
+  fi
+  if [[ -f "$PIDFILE" ]]; then
+    old="$(cat "$PIDFILE" || true)"
+    if [[ -n "${old}" ]] && kill -0 "$old" 2>/dev/null; then
+      kill "$old" 2>/dev/null || true
+    fi
+    rm -f "$PIDFILE"
+  fi
+  nohup "$HELPER/run.sh" >>"$LOG" 2>&1 &
+  echo $! >"$PIDFILE"
   sleep 1
 fi
-if [[ -f "$PIDFILE" ]]; then
-  old="$(cat "$PIDFILE" || true)"
-  if [[ -n "${old}" ]] && kill -0 "$old" 2>/dev/null; then
-    kill "$old" 2>/dev/null || true
-  fi
-  rm -f "$PIDFILE"
-fi
-
-nohup "$HELPER/run.sh" >>"$LOG" 2>&1 &
-echo $! >"$PIDFILE"
-sleep 1
 
 healthy=0
 for _ in $(seq 1 20); do

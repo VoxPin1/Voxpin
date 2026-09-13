@@ -1703,6 +1703,8 @@ def handle_parent_ping(kind: str, *, wifi: list[dict] | None = None, detail: str
     if kind == "sos":
         if notify.get("imessage"):
             status = "Help sent"
+        elif notify.get("cooldown"):
+            status = "Sent already"
         elif notify.get("configured"):
             status = "Msg failed"
         else:

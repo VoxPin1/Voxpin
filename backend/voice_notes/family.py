@@ -59,7 +59,7 @@ def _http_json(url: str, *, data: dict | None = None, headers: dict | None = Non
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _IMESSAGE_TO_PATH = os.path.join(_DIR, "imessage_to.txt")
-_IMESSAGE_COOLDOWN_S = 45.0
+_IMESSAGE_COOLDOWN_S = 5.0
 _last_imessage_at = 0.0
 SOS_IMESSAGE = "Sending from Voxpin, please pick me NOW!"
 
@@ -140,8 +140,8 @@ def send_sos_imessage(body: str, *, maps_url: str = "") -> dict[str, Any]:
     global _last_imessage_at
     now = time.monotonic()
     if now - _last_imessage_at < _IMESSAGE_COOLDOWN_S:
-        print("SOS iMessage skipped: cooldown")
-        return {"imessage": True, "configured": True, "cooldown": True}
+        print("SOS iMessage skipped: debounce")
+        return {"imessage": False, "configured": True, "cooldown": True}
 
     sent = _send_imessage(to, text)
     if sent:
