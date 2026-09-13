@@ -1,30 +1,273 @@
 #include "wifi_connect.h"
+
+#include "backend_http.h"
 #include "wifi_secrets.h"
 
+#include <HTTPClient.h>
 #include <WiFi.h>
+#include <WiFiClient.h>
+#include <WiFiUdp.h>
 
-bool wifi_connect_begin(uint32_t timeout_ms)
+char g_backend_host[64] = BACKEND_HOST;
+int g_backend_port = BACKEND_PORT;
+char g_backend_scheme[8] = BACKEND_SCHEME;
+
+#ifndef WIFI_SSID_2
+#define WIFI_SSID_2 ""
+#define WIFI_PASSWORD_2 ""
+#endif
+
+static const uint16_t kBeaconPort = 8766;
+
+static String fold_ssid(const String &input)
 {
-  WiFi.mode(WIFI_STA);
-  WiFi.disconnect();
-  delay(100);
+  String out;
+  out.reserve(input.length());
+  for (unsigned i = 0; i < input.length();) {
+    const uint8_t a = (uint8_t)input[i];
+    if (a == 0xE2 && i + 2 < input.length() &&
+        (uint8_t)input[i + 1] == 0x80 &&
+        ((uint8_t)input[i + 2] == 0x99 || (uint8_t)input[i + 2] == 0x98)) {
+      out += '\'';
+      i += 3;
+      continue;
+    }
+    out += (char)a;
+    i++;
+  }
+  out.toLowerCase();
+  return out;
+}
 
-  int n = WiFi.scanNetworks(false, true, false, 400);
+static bool ssid_match(const String &seen, const char *want)
+{
+  if (want == NULL || want[0] == '\0') {
+    return false;
+  }
+  return fold_ssid(seen) == fold_ssid(String(want));
+}
+
+static String scanned_ssid(int n, const char *want)
+{
+  for (int i = 0; i < n; i++) {
+    if (ssid_match(WiFi.SSID(i), want)) {
+      return WiFi.SSID(i);
+    }
+  }
+  return String();
+}
+
+static void wifi_idle(void)
+{
+  WiFi.disconnect(true, false);
+  const uint32_t start = millis();
+  while (WiFi.status() == WL_CONNECTED && (millis() - start) < 1500) {
+    delay(50);
+  }
+  delay(250);
+}
+
+static bool try_join(const char *ssid, const char *password, uint32_t timeout_ms)
+{
+  if (ssid == NULL || ssid[0] == '\0') {
+    return false;
+  }
+
+  wifi_idle();
+  Serial.printf("WiFi joining '%s'\n", ssid);
+  if (password == NULL || password[0] == '\0') {
+    WiFi.begin(ssid);
+  } else {
+    WiFi.begin(ssid, password);
+  }
+
+  const unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeout_ms) {
+    delay(250);
+    Serial.print(".");
+  }
+  Serial.println();
+  Serial.printf("WiFi status=%d\n", (int)WiFi.status());
+  return WiFi.status() == WL_CONNECTED;
+}
+
+static bool probe_health(const char *host, int port)
+{
+  if (host == NULL || host[0] == '\0' || port <= 0) {
+    return false;
+  }
+  char url[160];
+  snprintf(url, sizeof(url), "http://%s:%d/health", host, port);
+  WiFiClient plain;
+  HTTPClient http;
+  http.setTimeout(2000);
+  if (!http.begin(plain, url)) {
+    return false;
+  }
+  int code = http.GET();
+  http.end();
+  Serial.printf("helper %s:%d -> HTTP %d\n", host, port, code);
+  return code == 200;
+}
+
+static bool parse_beacon(const char *msg, char *host, size_t host_len, int *port)
+{
+  if (strncmp(msg, "VOXPIN ", 7) != 0) {
+    return false;
+  }
+  const char *p = msg + 7;
+  size_t i = 0;
+  while (*p && *p != ' ' && i + 1 < host_len) {
+    host[i++] = *p++;
+  }
+  host[i] = '\0';
+  if (host[0] == '\0') {
+    return false;
+  }
+  while (*p == ' ') {
+    p++;
+  }
+  int parsed = 8765;
+  if (*p) {
+    parsed = atoi(p);
+  }
+  if (parsed <= 0) {
+    parsed = 8765;
+  }
+  *port = parsed;
+  return true;
+}
+
+bool backend_discover(uint32_t timeout_ms)
+{
+  char found_host[64] = "";
+  int found_port = 8765;
+
+  WiFiUDP udp;
+  udp.begin(kBeaconPort);
+  const uint32_t start = millis();
+  while (millis() - start < timeout_ms) {
+    int n = udp.parsePacket();
+    if (n > 0) {
+      char buf[96];
+      int got = udp.read(buf, sizeof(buf) - 1);
+      if (got > 0) {
+        buf[got] = '\0';
+        if (parse_beacon(buf, found_host, sizeof(found_host), &found_port) &&
+            probe_health(found_host, found_port)) {
+          backend_set_target(found_host, found_port, "http");
+          udp.stop();
+          Serial.printf("Helper via beacon %s:%d\n", found_host, found_port);
+          return true;
+        }
+      }
+    }
+    delay(50);
+  }
+  udp.stop();
+
+  const char *candidates[] = {
+    g_backend_host,
+    BACKEND_HOST,
+    "192.168.68.56",
+    "192.168.68.85",
+    "172.20.10.2",
+    "192.0.0.2",
+  };
+  IPAddress gw = WiFi.gatewayIP();
+  char gw_text[16];
+  snprintf(gw_text, sizeof(gw_text), "%u.%u.%u.%u", gw[0], gw[1], gw[2], gw[3]);
+
+  for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+    if (probe_health(candidates[i], 8765)) {
+      backend_set_target(candidates[i], 8765, "http");
+      return true;
+    }
+  }
+  if (gw[0] != 0 && probe_health(gw_text, 8765)) {
+    backend_set_target(gw_text, 8765, "http");
+    return true;
+  }
+
+  Serial.println("Helper not found yet");
+  return false;
+}
+
+void backend_set_target(const char *host, int port, const char *scheme)
+{
+  if (host != NULL && host[0] != '\0') {
+    strncpy(g_backend_host, host, sizeof(g_backend_host) - 1);
+    g_backend_host[sizeof(g_backend_host) - 1] = '\0';
+  }
+  if (port > 0) {
+    g_backend_port = port;
+  }
+  if (scheme != NULL && scheme[0] != '\0') {
+    strncpy(g_backend_scheme, scheme, sizeof(g_backend_scheme) - 1);
+    g_backend_scheme[sizeof(g_backend_scheme) - 1] = '\0';
+  }
+}
+
+static bool join_known_networks(uint32_t timeout_ms)
+{
+  (void)timeout_ms;
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  wifi_idle();
+
+  int n = WiFi.scanNetworks(false, true, false, 500);
   Serial.printf("WiFi scan found %d networks\n", n);
   for (int i = 0; i < n && i < 12; i++) {
     Serial.printf("  ch%d %s rssi=%d\n", WiFi.channel(i), WiFi.SSID(i).c_str(), WiFi.RSSI(i));
   }
 
-  Serial.printf("WiFi joining '%s'\n", WIFI_SSID);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-
-  const unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeout_ms) {
-    delay(500);
-    Serial.print(".");
+  const String home_exact = scanned_ssid(n, WIFI_SSID);
+  String hotspot_exact = scanned_ssid(n, WIFI_SSID_2);
+  if (hotspot_exact.isEmpty()) {
+    hotspot_exact = scanned_ssid(n, "Rian's iPhone 16");
   }
-  Serial.println();
-  Serial.printf("WiFi status=%d\n", (int)WiFi.status());
+
+  if (home_exact.length() && try_join(home_exact.c_str(), WIFI_PASSWORD, 18000)) {
+    return true;
+  }
+  if (hotspot_exact.length() && try_join(hotspot_exact.c_str(), WIFI_PASSWORD_2, 20000)) {
+    return true;
+  }
+  if (home_exact.isEmpty() && try_join(WIFI_SSID, WIFI_PASSWORD, 12000)) {
+    return true;
+  }
+  if (hotspot_exact.isEmpty() && WIFI_SSID_2[0] != '\0' &&
+      try_join(WIFI_SSID_2, WIFI_PASSWORD_2, 12000)) {
+    return true;
+  }
+  return WiFi.status() == WL_CONNECTED;
+}
+
+bool wifi_connect_begin(uint32_t timeout_ms)
+{
+  if (!join_known_networks(timeout_ms)) {
+    return false;
+  }
+  backend_discover(4000);
+  return true;
+}
+
+bool wifi_reconnect(uint32_t timeout_ms)
+{
+  if (WiFi.status() == WL_CONNECTED) {
+    return true;
+  }
+  return wifi_connect_begin(timeout_ms);
+}
+
+void wifi_radio_off(void)
+{
+  WiFi.disconnect(true, false);
+  WiFi.mode(WIFI_OFF);
+}
+
+bool wifi_is_connected(void)
+{
   return WiFi.status() == WL_CONNECTED;
 }
 

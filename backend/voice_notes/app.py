@@ -8,11 +8,18 @@ import array
 import audioop
 import base64
 import io
+import json
 import os
 import re
+import socket
+import subprocess
 import sys
 import tempfile
 import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 import wave
 from datetime import datetime, timedelta, timezone
 
@@ -45,6 +52,7 @@ DOC_SCOPES = ["https://www.googleapis.com/auth/documents"]
 CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
 SCOPES = CALENDAR_SCOPES  # reminders / next-event / companion calendar
 DEFAULT_PORT = 8765
+BEACON_PORT = 8766
 TIMEZONE = os.environ.get("VOXPIN_TZ", "America/Los_Angeles")
 
 # gTTS language codes for common targets
@@ -76,6 +84,48 @@ SAY_VOICES = {
 }
 
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="/static")
+
+
+def lan_ipv4s() -> list[str]:
+    ips: list[str] = []
+    try:
+        out = subprocess.check_output(["ifconfig"], text=True)
+    except (OSError, subprocess.CalledProcessError):
+        return ips
+    for line in out.splitlines():
+        line = line.strip()
+        if not line.startswith("inet "):
+            continue
+        ip = line.split()[1]
+        if ip.startswith("127.") or ip.startswith("169.254."):
+            continue
+        ips.append(ip)
+    return ips
+
+
+def start_helper_beacon(port: int) -> None:
+    def loop() -> None:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        while True:
+            ips = lan_ipv4s()
+            if not ips:
+                time.sleep(1.0)
+                continue
+            for ip in ips:
+                msg = f"VOXPIN {ip} {port}".encode("ascii")
+                try:
+                    sock.sendto(msg, ("255.255.255.255", BEACON_PORT))
+                    parts = ip.split(".")
+                    if len(parts) == 4:
+                        sock.sendto(msg, (f"{parts[0]}.{parts[1]}.{parts[2]}.255", BEACON_PORT))
+                except OSError:
+                    pass
+            time.sleep(1.0)
+
+    threading.Thread(target=loop, name="voxpin-beacon", daemon=True).start()
+    print(f"Pin beacon on UDP {BEACON_PORT} from {', '.join(lan_ipv4s()) or 'no LAN IP yet'}")
 
 
 def hydrate_secrets_from_env() -> None:
@@ -266,6 +316,37 @@ def fetch_next_event() -> dict | None:
     return {"when": _format_event_when(event.get("start") or {}), "title": title}
 
 
+def fetch_calendar_range(start: datetime, end: datetime, limit: int = 12) -> list[dict]:
+    service = calendar_service()
+    result = (
+        service.events()
+        .list(
+            calendarId=CALENDAR_ID,
+            timeMin=start.astimezone(timezone.utc).isoformat(),
+            timeMax=end.astimezone(timezone.utc).isoformat(),
+            maxResults=limit,
+            singleEvents=True,
+            orderBy="startTime",
+        )
+        .execute()
+    )
+    events = []
+    for event in result.get("items") or []:
+        start_info = event.get("start") or {}
+        end_info = event.get("end") or {}
+        events.append(
+            {
+                "id": event.get("id", ""),
+                "title": (event.get("summary") or "(No title)").strip(),
+                "start": start_info.get("dateTime") or start_info.get("date"),
+                "end": end_info.get("dateTime") or end_info.get("date"),
+                "all_day": "date" in start_info and "dateTime" not in start_info,
+                "when_label": _format_event_when(start_info),
+            }
+        )
+    return events
+
+
 def fetch_calendar_events(days: int = 60) -> list[dict]:
     service = calendar_service()
     now = datetime.now(timezone.utc)
@@ -420,11 +501,43 @@ def amplify_pcm(pcm: bytes, sample_width: int = 2, target_peak: int = 12000) -> 
     return audioop.mul(pcm, sample_width, factor)
 
 
+def trim_silence_pcm(pcm: bytes, sample_rate: int, sample_width: int = 2) -> bytes:
+    """Drop leading/trailing hush so STT isn't waiting on seconds of quiet."""
+    if sample_width != 2 or len(pcm) < sample_rate:
+        return pcm
+    samples = array.array("h")
+    samples.frombytes(pcm[: len(pcm) - (len(pcm) % 2)])
+    if not samples:
+        return pcm
+    frame = max(1, sample_rate // 100)
+    thresh = 280
+    loud = []
+    for i in range(0, len(samples), frame):
+        peak = 0
+        for sample in samples[i : i + frame]:
+            mag = -sample if sample < 0 else sample
+            if mag > peak:
+                peak = mag
+        loud.append(peak >= thresh)
+    if not any(loud):
+        return pcm
+    first = next(i for i, is_loud in enumerate(loud) if is_loud)
+    last = len(loud) - 1 - next(i for i, is_loud in enumerate(reversed(loud)) if is_loud)
+    pad = 8
+    start = max(0, (first - pad) * frame)
+    end = min(len(samples), (last + 1 + pad) * frame)
+    trimmed = samples[start:end]
+    if len(trimmed) < sample_rate // 5:
+        return pcm
+    return trimmed.tobytes()
+
+
 def pcm_to_wav(pcm: bytes, sample_rate: int, channels: int, sample_width: int) -> bytes:
     if channels > 1:
         pcm, _ = loudest_mono(pcm, channels, sample_width)
         channels = 1
     pcm = amplify_pcm(pcm, sample_width)
+    pcm = trim_silence_pcm(pcm, sample_rate, sample_width)
     buf = io.BytesIO()
     with wave.open(buf, "wb") as wf:
         wf.setnchannels(channels)
@@ -479,7 +592,7 @@ def transcribe(wav_bytes: bytes, language: str = "en") -> str:
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=12) as response:
             response_text = response.read().decode("utf-8", "replace")
     except urllib.error.HTTPError as err:
         detail = err.read().decode("utf-8", "replace")[:200]
@@ -561,6 +674,26 @@ MORE_MINUTES_PREFIX = re.compile(
     r"fifteen|twenty|thirty)\s+more\s+minutes?|"
     r"(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|"
     r"fifteen|twenty|thirty)\s+minutes?\s+(?:till|until|to|before))\b",
+    re.IGNORECASE,
+)
+ASK_PREFIX = re.compile(
+    r"^\s*(?:(?:ok|okay|hey)[, ]+)?(?:please[, ]+)?"
+    r"(?:tell\s+me|read(?:\s+me)?|list|what(?:'s| is|s| are)|who(?:'s| is|s)|"
+    r"when(?:'s| is|s)|why|how|do\s+i|did\s+i|can\s+you|could\s+you|"
+    r"is\s+there|are\s+there|what\s+time|what\s+do\s+i\s+have)\b",
+    re.IGNORECASE,
+)
+REMINDERS_QUERY = re.compile(
+    r"\b(?:reminders?|calendar|schedule|agenda|events?|what(?:'s| is|s)\s+next|"
+    r"coming\s+up|what\s+do\s+i\s+have)\b",
+    re.IGNORECASE,
+)
+NOTES_QUERY = re.compile(
+    r"\b(?:my\s+notes?|saved\s+notes?|what\s+did\s+i\s+(?:note|write|save))\b",
+    re.IGNORECASE,
+)
+TIME_QUERY = re.compile(
+    r"\b(?:what(?:'s| is|s)\s+the\s+time|what\s+time\s+is\s+it|tell\s+me\s+the\s+time)\b",
     re.IGNORECASE,
 )
 IN_DURATION = re.compile(
@@ -803,10 +936,163 @@ def parse_command(transcript: str) -> tuple[str | None, str]:
         return "timer", text[match.end() :].strip(" ,.-")
     if MORE_MINUTES_PREFIX.match(text):
         return "timer", text
+    if ASK_PREFIX.match(text) or REMINDERS_QUERY.search(text) or TIME_QUERY.search(text):
+        return "ask", text
     if text:
         # Bare recordings (no command phrase) still go to the Google Doc as notes.
         return "note", text
     return None, text
+
+
+def _clip_speech(text: str, limit: int = 420) -> str:
+    text = re.sub(r"\s+", " ", (text or "").strip())
+    if len(text) <= limit:
+        return text
+    cut = text[:limit].rsplit(" ", 1)[0]
+    return cut.rstrip(" ,.;:") + "."
+
+
+def reminder_window(text: str) -> tuple[datetime, datetime, str]:
+    now = now_local()
+    start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    lowered = (text or "").lower()
+    if re.search(r"\btomorrow\b", lowered):
+        start += timedelta(days=1)
+        return start, start + timedelta(days=1), "tomorrow"
+    if re.search(r"\b(?:this\s+week|next\s+seven\s+days)\b", lowered):
+        return start, start + timedelta(days=7), "this week"
+    return start, start + timedelta(days=1), "today"
+
+
+def upcoming_events(limit: int = 8, text: str = "") -> tuple[list[dict], str]:
+    if not calendar_ready():
+        return [], "today"
+    start, end, label = reminder_window(text)
+    now = now_local()
+    events = []
+    for event in fetch_calendar_range(start, end, limit=limit):
+        raw = event.get("start") or ""
+        if not raw:
+            continue
+        try:
+            if "T" in raw:
+                stamp = datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(_local_tz())
+            else:
+                stamp = datetime.fromisoformat(raw).replace(tzinfo=_local_tz())
+        except ValueError:
+            events.append(event)
+            continue
+        if not event.get("all_day") and stamp < now - timedelta(minutes=1):
+            continue
+        events.append(event)
+        if len(events) >= limit:
+            break
+    return events, label
+
+
+def speak_reminders(text: str = "") -> str:
+    if not calendar_ready():
+        return "Calendar isn't signed in yet."
+    events, label = upcoming_events(8, text)
+    if not events:
+        return f"You have no reminders {label}."
+    parts = []
+    for event in events:
+        when = event.get("when_label") or "soon"
+        title = event.get("title") or "Reminder"
+        parts.append(f"{title} at {when}" if "at" not in when.lower() else f"{title} {when}")
+    if len(parts) == 1:
+        return f"Today you have {parts[0]}." if label == "today" else f"{label.capitalize()} you have {parts[0]}."
+    spoken = (
+        f"{'Today' if label == 'today' else label.capitalize()} you have "
+        + ", ".join(parts[:-1])
+        + ", and "
+        + parts[-1]
+        + "."
+    )
+    return _clip_speech(spoken, 420)
+
+
+def speak_notes() -> str:
+    notes = [item for item in store.list_recordings(20) if item.get("kind") == "note"]
+    if not notes:
+        return "You don't have any saved notes yet."
+    latest = [item.get("text") or "" for item in notes[:3] if item.get("text")]
+    if not latest:
+        return "You don't have any saved notes yet."
+    if len(latest) == 1:
+        return f"Your latest note is: {latest[0]}."
+    return _clip_speech("Your latest notes are: " + ". ".join(latest), 420)
+
+
+def web_answer(question: str) -> str:
+    query = urllib.parse.quote_plus(question)
+    headers = {"User-Agent": "VoxPin/1.0"}
+    try:
+        req = urllib.request.Request(
+            f"https://api.duckduckgo.com/?q={query}&format=json&no_html=1&skip_disambig=1",
+            headers=headers,
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8", "ignore") or "{}")
+        text = (data.get("AbstractText") or data.get("Answer") or "").strip()
+        if not text:
+            related = data.get("RelatedTopics") or []
+            if related and isinstance(related[0], dict):
+                text = (related[0].get("Text") or "").strip()
+        if text:
+            return _clip_speech(text)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as err:
+        print(f"ask ddg failed: {err}", flush=True)
+
+    try:
+        req = urllib.request.Request(
+            f"https://en.wikipedia.org/api/rest_v1/page/summary/{query}",
+            headers=headers,
+        )
+        with urllib.request.urlopen(req, timeout=6) as resp:
+            data = json.loads(resp.read().decode("utf-8", "ignore") or "{}")
+        text = (data.get("extract") or "").strip()
+        if text:
+            return _clip_speech(text)
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as err:
+        print(f"ask wiki failed: {err}", flush=True)
+    return "I don't know that one yet."
+
+
+def answer_question(text: str) -> str:
+    question = (text or "").strip()
+    if TIME_QUERY.search(question):
+        return now_local().strftime("It's %-I:%M %p.")
+    if NOTES_QUERY.search(question):
+        return speak_notes()
+    if REMINDERS_QUERY.search(question) or re.search(
+        r"\b(?:reminder|calendar|schedule|event)s?\b", question, re.I
+    ):
+        return speak_reminders(question)
+    if len(question) < 2:
+        return "I didn't catch the question."
+    return web_answer(question)
+
+
+def spoken_pcm_response(
+    text: str,
+    action: str,
+    status: str,
+    sample_rate: int,
+    play_channels: int = 2,
+):
+    spoken = speak_translated_pcm(text, "en", sample_rate, 1)
+    if not spoken:
+        return json_action(action, status=status, text=text)
+    resp = Response(spoken, mimetype="application/octet-stream")
+    resp.headers["X-Action"] = action
+    resp.headers["X-Status"] = status
+    resp.headers["X-Sample-Rate"] = str(sample_rate)
+    resp.headers["X-Channels"] = "1"
+    resp.headers["X-Bits"] = "16"
+    resp.status_code = 201
+    return resp
 
 
 GREETING_EN = "Hello, Are you ready to start your Journey!"
@@ -935,27 +1221,7 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
         gtx_rate_limited = "429" in err_s
         print(f"translate gtx failed: {err}")
 
-    # 2) translators package — better under Google 429s (skip slow dead-ends first)
-    try:
-        import translators as ts
-
-        for engine in ("google", "alibaba"):
-            try:
-                out = ts.translate_text(
-                    text,
-                    translator=engine,
-                    from_language=source,
-                    to_language=target,
-                )
-                out = (out or "").strip()
-                if out:
-                    return _remember(out)
-            except Exception as eng_err:
-                print(f"translate {engine} failed: {eng_err}")
-    except Exception as err:
-        print(f"translate translators failed: {err}")
-
-    # 3) MyMemory (short timeout; skip if Google is actively rate-limiting us)
+    # 2) MyMemory (short timeout; skip if Google is actively rate-limiting us)
     if not gtx_rate_limited:
         try:
             src = MYMEMORY_LOCALES.get(source_lang, MYMEMORY_LOCALES.get(source, "en-US"))
@@ -1087,7 +1353,7 @@ def speak_translated_pcm(text: str, lang: str, sample_rate: int, channels: int) 
     text = (text or "").strip()
     if not text:
         return b""
-    play_channels = max(2, channels)
+    play_channels = 1 if channels <= 1 else 2
 
     # Prefer offline macOS voices — avoids slow/flaky gTTS network round-trips.
     wav_bytes = _tts_macos_wav(text, lang, sample_rate)
@@ -1480,14 +1746,14 @@ def note():
         source = "en"
         wav_bytes = pcm_to_wav(pcm, sample_rate, channels, sample_width)
         stats = pcm_stats(pcm, sample_width)
+        t_stt = datetime.now(timezone.utc)
+        transcript = transcribe(wav_bytes, language=source).strip()
+        stt_s = (datetime.now(timezone.utc) - t_stt).total_seconds()
         print(
-            f"clip: {len(pcm)} bytes ch={channels} rms={stats['rms']} peak={stats['peak']}",
+            f"clip: {len(pcm)}B -> wav {len(wav_bytes)}B ch={channels} "
+            f"rms={stats['rms']} peak={stats['peak']} stt={stt_s:.2f}s",
             flush=True,
         )
-        last_wav = os.path.join(DIR, "last_clip.wav")
-        with open(last_wav, "wb") as handle:
-            handle.write(wav_bytes)
-        transcript = transcribe(wav_bytes, language=source).strip()
         action, text = parse_command(transcript)
         print(f"heard: {transcript!r} -> {action}", flush=True)
         if action is None:
@@ -1495,29 +1761,17 @@ def note():
             resp = Response(status=204)
             resp.headers["X-Action"] = "none"
             return resp
-        if not text and action not in {"translate", "location", "sos", "weather"}:
+        if not text and action not in {"translate", "location", "sos", "weather", "ask"}:
             print(f"ignored empty: {transcript!r}", flush=True)
             resp = Response(status=204)
             resp.headers["X-Action"] = "none"
             return resp
 
         if action == "note":
-            docs_ok = True
-            try:
-                append_to_doc(f"Note: {text}")
-            except FileNotFoundError as err:
-                docs_ok = False
-                print(f"note saved locally only (Docs not connected): {err}")
-            except Exception as err:
-                docs_ok = False
-                print(f"note saved locally only (Docs error): {err}")
             store.add_recording("note", text)
+            append_to_doc_later(f"Note: {text}")
             print(f"note: {text}", flush=True)
-            # Always treat local save as success so the pin doesn't look broken
-            # when Google Docs isn't linked yet.
-            if not docs_ok:
-                return json_action("note_local", text=text)
-            return json_action("note", text=text)
+            return spoken_pcm_response("Notes added.", "note", "Saved", sample_rate)
 
         if action == "remind":
             if not calendar_ready():
@@ -1527,7 +1781,13 @@ def note():
             created = create_calendar_event(title, when)
             store.add_recording("task", title, when=created["when"])
             print(f"remind: {created['when']} {title}", flush=True)
-            return json_action("remind", status="Reminded", text=title, when=created["when"])
+            spoken = f"Okay, reminder set. {title}, {created['when']}."
+            return spoken_pcm_response(spoken, "remind", "Reminded", sample_rate)
+
+        if action == "ask":
+            spoken = answer_question(text)
+            print(f"ask: {text!r} -> {spoken!r}", flush=True)
+            return spoken_pcm_response(spoken, "ask", "Answer", sample_rate)
 
         if action == "timer":
             if not calendar_ready():
@@ -1555,14 +1815,14 @@ def note():
             loc = family.geolocate()
             summary = family.weather_summary(loc["lat"], loc["lon"])
             store.add_recording("weather", summary["spoken"], when=loc.get("place"))
-            spoken = speak_translated_pcm(summary["spoken"], "en", sample_rate, 2)
+            spoken = speak_translated_pcm(summary["spoken"], "en", sample_rate, 1)
             if not spoken:
                 return json_action("weather", status=summary["status"], text=summary["spoken"])
             resp = Response(spoken, mimetype="application/octet-stream")
             resp.headers["X-Action"] = "weather"
             resp.headers["X-Status"] = summary["status"]
             resp.headers["X-Sample-Rate"] = str(sample_rate)
-            resp.headers["X-Channels"] = "2"
+            resp.headers["X-Channels"] = "1"
             resp.headers["X-Bits"] = "16"
             resp.status_code = 201
             return resp
@@ -1575,11 +1835,11 @@ def note():
                 "es": "Di translate this y luego la frase.",
                 "en": "Say translate this, then the phrase.",
             }.get(target.split("-")[0], "Say translate this, then the phrase.")
-            spoken = speak_translated_pcm(prompt, target, sample_rate, 2)
+            spoken = speak_translated_pcm(prompt, target, sample_rate, 1)
             resp = Response(spoken, mimetype="application/octet-stream")
             resp.headers["X-Action"] = "translate"
             resp.headers["X-Sample-Rate"] = str(sample_rate)
-            resp.headers["X-Channels"] = "2"
+            resp.headers["X-Channels"] = "1"
             resp.headers["X-Bits"] = "16"
             resp.headers["X-Language"] = target
             resp.status_code = 201
@@ -1590,7 +1850,7 @@ def note():
         t1 = datetime.now(timezone.utc)
         if not translated:
             return jsonify({"ok": False, "error": "empty translation"}), 500
-        spoken = speak_translated_pcm(translated, target, sample_rate, 2)
+        spoken = speak_translated_pcm(translated, target, sample_rate, 1)
         t2 = datetime.now(timezone.utc)
         if not spoken:
             return jsonify({"ok": False, "error": "empty speech"}), 500
@@ -1610,7 +1870,7 @@ def note():
         resp = Response(spoken, mimetype="application/octet-stream")
         resp.headers["X-Action"] = "translate"
         resp.headers["X-Sample-Rate"] = str(sample_rate)
-        resp.headers["X-Channels"] = "2"
+        resp.headers["X-Channels"] = "1"
         resp.headers["X-Bits"] = "16"
         resp.headers["X-Language"] = target
         resp.status_code = 201
@@ -1655,6 +1915,7 @@ def main() -> int:
         print("Google Calendar connected — next event and reminders enabled")
     else:
         print("Google Calendar not connected. Run ./run.sh --login to show events and add reminders.")
+    start_helper_beacon(args.port)
     app.run(host="0.0.0.0", port=args.port, threaded=True)
     return 0
 

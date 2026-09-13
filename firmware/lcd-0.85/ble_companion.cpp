@@ -51,3 +51,16 @@ void ble_companion_begin(void)
   BLEDevice::startAdvertising();
   Serial.println("Bluetooth: advertising as VoxPin");
 }
+
+void ble_companion_sleep(void)
+{
+  BLEAdvertising *advertising = BLEDevice::getAdvertising();
+  if (advertising != nullptr) {
+    advertising->stop();
+  }
+}
+
+void ble_companion_wake(void)
+{
+  BLEDevice::startAdvertising();
+}

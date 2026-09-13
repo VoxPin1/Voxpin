@@ -4,6 +4,7 @@
 #include "ble_companion.h"
 #include "voice_note.h"
 #include "side_buttons.h"
+#include "idle.h"
 
 void setup()
 {
@@ -30,6 +31,7 @@ void setup()
   voice_note_init();
   voice_note_start(home_ui_set_status);
   side_buttons_start(home_ui_set_status);
+  idle_start();
   Serial.println("Home screen ready.");
   Serial.flush();
 }

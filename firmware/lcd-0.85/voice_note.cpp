@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "idle.h"
 
 static const char *TAG = "voice_note";
 
@@ -30,10 +31,76 @@ static constexpr uint32_t kMaxRecordBytes = kBytesPerSec * kMaxSeconds;
 static constexpr uint32_t kMaxBytes = kSampleRate * kPlayChannels * (kBits / 8) * kMaxSeconds;
 static constexpr uint32_t kMinBytes = kBytesPerSec / 4;
 static constexpr uint32_t kHoldToTalkMs = 400;
-static constexpr uint32_t kClickAutoSendMs = 8000;
+static constexpr uint32_t kSilenceStopBytes = kBytesPerSec / 3;
+static constexpr uint32_t kMaxAfterReleaseBytes = kBytesPerSec * 2;
 
 static uint8_t *audio_buf = NULL;
 static voice_status_cb_t status_cb = NULL;
+
+static bool chunk_is_loud(const uint8_t *data, uint32_t len)
+{
+  const int16_t *samples = (const int16_t *)data;
+  const uint32_t count = len / 2;
+  uint32_t hits = 0;
+  for (uint32_t i = 0; i < count; i += 8) {
+    int16_t sample = samples[i];
+    if (sample < 0) {
+      sample = (int16_t)-sample;
+    }
+    if (sample > 500) {
+      hits++;
+    }
+  }
+  return hits >= 3;
+}
+
+static uint32_t trim_pcm16(uint8_t *data, uint32_t len)
+{
+  if (data == NULL || len < 4) {
+    return len;
+  }
+  int16_t *samples = (int16_t *)data;
+  uint32_t count = len / 2;
+  const int16_t thresh = 450;
+  uint32_t start = 0;
+  uint32_t end = count;
+  while (start < count) {
+    int16_t sample = samples[start];
+    if (sample < 0) {
+      sample = (int16_t)-sample;
+    }
+    if (sample >= thresh) {
+      break;
+    }
+    start++;
+  }
+  while (end > start) {
+    int16_t sample = samples[end - 1];
+    if (sample < 0) {
+      sample = (int16_t)-sample;
+    }
+    if (sample >= thresh) {
+      break;
+    }
+    end--;
+  }
+  const uint32_t pad = kSampleRate / 10;
+  if (start > pad) {
+    start -= pad;
+  } else {
+    start = 0;
+  }
+  if (end + pad < count) {
+    end += pad;
+  } else {
+    end = count;
+  }
+  const uint32_t out_n = end - start;
+  if (start > 0 && out_n > 0) {
+    memmove(samples, samples + start, out_n * 2);
+  }
+  return out_n * 2;
+}
 
 static void set_status(const char *text)
 {
@@ -170,9 +237,11 @@ static bool handle_clip(uint8_t *data, uint32_t len)
       show_status("Help sent", 3500);
     } else if (action == "need_login") {
       show_status("Sign in", 3500);
-    } else if (action == "note_local") {
-      show_status("Saved local", 3500);
-    } else {
+                } else if (action == "note_local") {
+                  show_status("Saved local", 3500);
+                } else if (action == "ask") {
+                  show_status("Answered", 3500);
+                } else {
       show_status("Saved", 3500);
     }
     return true;
@@ -223,33 +292,52 @@ static void voice_note_task(void *arg)
       vTaskDelay(pdMS_TO_TICKS(20));
     }
 
+    idle_touch();
+    if (idle_is_sleeping()) {
+      show_status("Waking", 0);
+      idle_wake_sync();
+    }
+
     show_status("Recording", 0);
     memset(audio_buf, 0, kMaxBytes);
     uint32_t written = 0;
     const uint32_t press_started = millis();
     bool saw_release = false;
+    uint32_t silence_bytes = 0;
+    uint32_t after_release = 0;
 
     while (written + kChunkBytes <= kMaxRecordBytes) {
       audio_playback_read(audio_buf + written, kChunkBytes);
+      const bool loud = chunk_is_loud(audio_buf + written, kChunkBytes);
       written += kChunkBytes;
 
       const bool down = boot_pressed();
       if (!down) {
-        if (!saw_release && (millis() - press_started) >= kHoldToTalkMs) {
-          break;
-        }
         saw_release = true;
       } else if (saw_release) {
         wait_boot_release();
         break;
       }
 
-      if (saw_release && (millis() - press_started) >= kClickAutoSendMs) {
-        break;
+      if (saw_release) {
+        after_release += kChunkBytes;
+        if (loud) {
+          silence_bytes = 0;
+        } else {
+          silence_bytes += kChunkBytes;
+        }
+        const bool held = (millis() - press_started) >= kHoldToTalkMs;
+        if (held && silence_bytes >= kSilenceStopBytes) {
+          break;
+        }
+        if (!held && (silence_bytes >= kSilenceStopBytes || after_release >= kMaxAfterReleaseBytes)) {
+          break;
+        }
       }
     }
 
     wait_boot_release();
+    written = trim_pcm16(audio_buf, written);
 
     if (written < kMinBytes) {
       show_status("Too short", 2000);

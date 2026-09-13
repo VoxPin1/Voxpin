@@ -12,13 +12,20 @@
 #define BACKEND_SCHEME "http"
 #endif
 
+extern char g_backend_host[64];
+extern int g_backend_port;
+extern char g_backend_scheme[8];
+
+void backend_set_target(const char *host, int port, const char *scheme);
+bool backend_discover(uint32_t timeout_ms);
+
 inline void backend_make_url(char *out, size_t out_len, const char *path)
 {
-  if ((BACKEND_PORT == 443 && strcmp(BACKEND_SCHEME, "https") == 0) ||
-      (BACKEND_PORT == 80 && strcmp(BACKEND_SCHEME, "http") == 0)) {
-    snprintf(out, out_len, "%s://%s%s", BACKEND_SCHEME, BACKEND_HOST, path);
+  if ((g_backend_port == 443 && strcmp(g_backend_scheme, "https") == 0) ||
+      (g_backend_port == 80 && strcmp(g_backend_scheme, "http") == 0)) {
+    snprintf(out, out_len, "%s://%s%s", g_backend_scheme, g_backend_host, path);
   } else {
-    snprintf(out, out_len, "%s://%s:%d%s", BACKEND_SCHEME, BACKEND_HOST, BACKEND_PORT, path);
+    snprintf(out, out_len, "%s://%s:%d%s", g_backend_scheme, g_backend_host, g_backend_port, path);
   }
 }
 
@@ -27,7 +34,7 @@ inline bool backend_http_begin(HTTPClient &http, WiFiClientSecure &tls, WiFiClie
 {
   char url[160];
   backend_make_url(url, sizeof(url), path);
-  if (strcmp(BACKEND_SCHEME, "https") == 0) {
+  if (strcmp(g_backend_scheme, "https") == 0) {
     tls.setInsecure();
     return http.begin(tls, url);
   }

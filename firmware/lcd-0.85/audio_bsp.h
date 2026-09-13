@@ -14,6 +14,7 @@ void audio_playback_read(void *data_ptr, uint32_t len);
 void audio_playback_write(void *data_ptr, uint32_t len);
 void audio_set_playing(bool playing);
 bool audio_is_playing(void);
+void audio_pa_enable(bool on);
 
 #ifdef __cplusplus
 }

@@ -128,3 +128,8 @@ bool audio_is_playing(void)
 {
   return playing;
 }
+
+void audio_pa_enable(bool on)
+{
+  gpio_set_level((gpio_num_t)PA_CTRL_PIN, on ? 1 : 0);
+}

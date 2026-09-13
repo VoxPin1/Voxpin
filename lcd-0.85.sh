@@ -44,6 +44,10 @@ sync_sketch() {
   cp "${SRC}/backend_http.h" "$SKETCH/"
   cp "${SRC}/ble_companion.h" "$SKETCH/"
   cp "${SRC}/ble_companion.cpp" "$SKETCH/"
+  cp "${SRC}/idle.h" "$SKETCH/"
+  cp "${SRC}/idle.cpp" "$SKETCH/"
+  cp "${SRC}/imu.h" "$SKETCH/"
+  cp "${SRC}/imu.cpp" "$SKETCH/"
 
   if [[ -f "${SRC}/backend_config.h" ]]; then
     cp "${SRC}/backend_config.h" "$SKETCH/"

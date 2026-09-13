@@ -33,6 +33,7 @@ static lv_obj_t *event_label = NULL;
 static lv_obj_t *status_label = NULL;
 static char last_event_text[96] = "";
 static uint32_t last_event_fetch_ms = 0;
+static volatile bool ui_paused = false;
 
 static bool ui_lock(int timeout_ms)
 {
@@ -183,11 +184,11 @@ static void lvgl_task(void *arg)
 {
   (void)arg;
   for (;;) {
-    if (ui_lock(-1)) {
+    if (!ui_paused && ui_lock(-1)) {
       lv_timer_handler();
       ui_unlock();
     }
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(ui_paused ? 200 : 20));
   }
 }
 
@@ -195,11 +196,11 @@ static void home_update_task(void *arg)
 {
   (void)arg;
   for (;;) {
-    if (ui_lock(-1)) {
+    if (!ui_paused && ui_lock(-1)) {
       update_home_labels();
       ui_unlock();
     }
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    vTaskDelay(pdMS_TO_TICKS(ui_paused ? 1000 : 1000));
   }
 }
 
@@ -228,12 +229,22 @@ void home_ui_set_status(const char *text)
   }
 }
 
+void home_ui_set_paused(bool paused)
+{
+  ui_paused = paused;
+}
+
+void home_ui_set_backlight(uint8_t duty)
+{
+  ledcWrite(LCD_BL_PIN, duty);
+}
+
 void home_ui_begin(void)
 {
   Serial.println("lcd backlight");
   Serial.flush();
-  pinMode(LCD_BL_PIN, OUTPUT);
-  digitalWrite(LCD_BL_PIN, HIGH);
+  ledcAttach(LCD_BL_PIN, 5000, 8);
+  ledcWrite(LCD_BL_PIN, 255);
 
   Serial.println("lcd gfx begin");
   Serial.flush();

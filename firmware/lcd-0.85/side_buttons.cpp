@@ -13,6 +13,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "idle.h"
 
 static const char *TAG = "side_btn";
 static void (*status_cb)(const char *text) = NULL;
@@ -129,6 +130,11 @@ static void side_buttons_task(void *arg)
     }
     const bool held = plus_pressed() && (millis() - started) >= 900;
     wait_release();
+    idle_touch();
+    if (idle_is_sleeping()) {
+      set_status("Waking", 0);
+      idle_wake_sync();
+    }
     if (held) {
       set_status("Sending help", 0);
       post_event("/sos", "Help sent");
