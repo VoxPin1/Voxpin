@@ -36,7 +36,8 @@ static bool plus_pressed(void)
 
 static void wait_release(void)
 {
-  while (plus_pressed()) {
+  const uint32_t started = millis();
+  while (plus_pressed() && (millis() - started) < 2500) {
     vTaskDelay(pdMS_TO_TICKS(20));
   }
   vTaskDelay(pdMS_TO_TICKS(40));
@@ -87,7 +88,7 @@ static bool post_event(const char *path, const char *ok_status)
   WiFiClientSecure tls;
   WiFiClient plain;
   HTTPClient http;
-  http.setTimeout(15000);
+  http.setTimeout(30000);
   if (!backend_http_begin(http, tls, plain, path)) {
     set_status("Send failed", 2500);
     return false;
@@ -124,24 +125,14 @@ static void side_buttons_task(void *arg)
     while (!plus_pressed()) {
       vTaskDelay(pdMS_TO_TICKS(20));
     }
-    const uint32_t started = millis();
-    while (plus_pressed() && (millis() - started) < 900) {
-      vTaskDelay(pdMS_TO_TICKS(20));
-    }
-    const bool held = plus_pressed() && (millis() - started) >= 900;
+    set_status("Sending help", 0);
     wait_release();
     idle_touch();
     if (idle_is_sleeping()) {
       set_status("Waking", 0);
       idle_wake_sync();
     }
-    if (held) {
-      set_status("Sending help", 0);
-      post_event("/sos", "Help sent");
-    } else {
-      set_status("Sending loc", 0);
-      post_event("/ping", "Sent loc");
-    }
+    post_event("/sos", "Help sent");
   }
 }
 

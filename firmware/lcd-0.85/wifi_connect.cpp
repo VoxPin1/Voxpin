@@ -208,6 +208,23 @@ void backend_set_target(const char *host, int port, const char *scheme)
   }
 }
 
+// iPhone Personal Hotspot often uses a curly apostrophe (U+2019).
+static const char kHotspotSsidCurly[] = "Rian\xe2\x80\x99s iPhone 16";
+
+static bool join_hotspot(const String &scanned)
+{
+  if (WIFI_SSID_2[0] == '\0' && WIFI_PASSWORD_2[0] == '\0') {
+    return false;
+  }
+  if (scanned.length() && try_join(scanned.c_str(), WIFI_PASSWORD_2, 20000)) {
+    return true;
+  }
+  if (try_join(WIFI_SSID_2, WIFI_PASSWORD_2, 18000)) {
+    return true;
+  }
+  return try_join(kHotspotSsidCurly, WIFI_PASSWORD_2, 18000);
+}
+
 static bool join_known_networks(uint32_t timeout_ms)
 {
   (void)timeout_ms;
@@ -224,20 +241,26 @@ static bool join_known_networks(uint32_t timeout_ms)
   const String home_exact = scanned_ssid(n, WIFI_SSID);
   String hotspot_exact = scanned_ssid(n, WIFI_SSID_2);
   if (hotspot_exact.isEmpty()) {
-    hotspot_exact = scanned_ssid(n, "Rian's iPhone 16");
+    hotspot_exact = scanned_ssid(n, kHotspotSsidCurly);
   }
 
+  // Prefer home when it is actually on the air. Do not wait on a missing
+  // home SSID at a venue — go straight to the phone hotspot.
   if (home_exact.length() && try_join(home_exact.c_str(), WIFI_PASSWORD, 18000)) {
     return true;
   }
-  if (hotspot_exact.length() && try_join(hotspot_exact.c_str(), WIFI_PASSWORD_2, 20000)) {
+  if (join_hotspot(hotspot_exact)) {
     return true;
   }
-  if (home_exact.isEmpty() && try_join(WIFI_SSID, WIFI_PASSWORD, 12000)) {
-    return true;
+
+  // Hotspot can take a moment to advertise 2.4 GHz. Rescan once and retry.
+  wifi_idle();
+  n = WiFi.scanNetworks(false, true, false, 500);
+  hotspot_exact = scanned_ssid(n, WIFI_SSID_2);
+  if (hotspot_exact.isEmpty()) {
+    hotspot_exact = scanned_ssid(n, kHotspotSsidCurly);
   }
-  if (hotspot_exact.isEmpty() && WIFI_SSID_2[0] != '\0' &&
-      try_join(WIFI_SSID_2, WIFI_PASSWORD_2, 12000)) {
+  if (join_hotspot(hotspot_exact)) {
     return true;
   }
   return WiFi.status() == WL_CONNECTED;

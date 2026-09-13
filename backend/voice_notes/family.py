@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -56,23 +57,122 @@ def _http_json(url: str, *, data: dict | None = None, headers: dict | None = Non
     return json.loads(raw) if raw else {}
 
 
-def notify_parent(title: str, body: str) -> None:
-    """Laptop notification so a parent sees SOS/location without staring at the site."""
+_DIR = os.path.dirname(os.path.abspath(__file__))
+_IMESSAGE_TO_PATH = os.path.join(_DIR, "imessage_to.txt")
+_IMESSAGE_COOLDOWN_S = 45.0
+_last_imessage_at = 0.0
+SOS_IMESSAGE = "Sending from Voxpin, please pick me NOW!"
+
+_IMESSAGE_SCRIPTS = (
+    """
+on run argv
+  set targetPhone to item 1 of argv
+  set messageText to item 2 of argv
+  tell application "Messages"
+    set targetService to 1st account whose service type = iMessage
+    set targetBuddy to participant targetPhone of targetService
+    send messageText to targetBuddy
+  end tell
+end run
+""",
+    """
+on run argv
+  set targetPhone to item 1 of argv
+  set messageText to item 2 of argv
+  tell application "Messages"
+    send messageText to buddy targetPhone of (1st service whose service type is iMessage)
+  end tell
+end run
+""",
+)
+
+
+def imessage_destination() -> str:
+    raw = (os.environ.get("VOXPIN_IMESSAGE_TO") or "").strip()
+    if not raw and os.path.exists(_IMESSAGE_TO_PATH):
+        with open(_IMESSAGE_TO_PATH, encoding="utf-8") as handle:
+            raw = handle.read().strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if raw.startswith("+") and digits:
+        return "+" + digits
+    if len(digits) == 10:
+        return "+1" + digits
+    if len(digits) == 11 and digits.startswith("1"):
+        return "+" + digits
+    return raw
+
+
+def notify_parent(title: str, body: str, *, kind: str = "", maps_url: str = "") -> dict[str, Any]:
+    """Mac banner always; iMessage mom on SOS."""
     title = (title or "VoxPin")[:48]
-    body = (body or "")[:180]
+    body = (body or "").strip()
+    _notify_macos(title, body[:180])
+    if kind != "sos":
+        return {"imessage": False, "configured": bool(imessage_destination())}
+    return send_sos_imessage(body, maps_url=maps_url)
+
+
+def _notify_macos(title: str, body: str) -> None:
     if sys.platform != "darwin":
         print(f"parent notify: {title}: {body}")
         return
+
     def q(text: str) -> str:
         return text.replace("\\", "\\\\").replace('"', '\\"')
 
-    script = (
-        f'display notification "{q(body)}" with title "{q(title)}" sound name "Glass"'
-    )
+    script = f'display notification "{q(body)}" with title "{q(title)}" sound name "Glass"'
     try:
         subprocess.run(["osascript", "-e", script], check=False, timeout=5)
     except Exception as err:
         print(f"parent notify failed: {err}")
+
+
+def send_sos_imessage(body: str, *, maps_url: str = "") -> dict[str, Any]:
+    to = imessage_destination()
+    if not to:
+        print("SOS iMessage skipped: set VOXPIN_IMESSAGE_TO or imessage_to.txt")
+        return {"imessage": False, "configured": False}
+
+    text = SOS_IMESSAGE
+    if maps_url:
+        text = f"{text}\n{maps_url}"
+
+    global _last_imessage_at
+    now = time.monotonic()
+    if now - _last_imessage_at < _IMESSAGE_COOLDOWN_S:
+        print("SOS iMessage skipped: cooldown")
+        return {"imessage": True, "configured": True, "cooldown": True}
+
+    sent = _send_imessage(to, text)
+    if sent:
+        _last_imessage_at = now
+    return {"imessage": sent, "configured": True, "cooldown": False}
+
+
+def _send_imessage(to: str, text: str) -> bool:
+    if sys.platform != "darwin":
+        print("SOS iMessage skipped: Messages.app is macOS-only")
+        return False
+    last_err = ""
+    for script in _IMESSAGE_SCRIPTS:
+        try:
+            result = subprocess.run(
+                ["osascript", "-", to, text],
+                input=script,
+                capture_output=True,
+                text=True,
+                timeout=20,
+                check=False,
+            )
+        except Exception as err:
+            last_err = str(err)
+            continue
+        if result.returncode == 0:
+            print("SOS iMessage sent")
+            return True
+        last_err = (result.stderr or result.stdout or "").strip() or f"osascript {result.returncode}"
+    print(f"SOS iMessage failed: {last_err}")
+    return False
 
 
 def geolocate(wifi: list[dict[str, Any]] | None = None) -> dict[str, Any]:

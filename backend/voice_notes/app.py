@@ -1679,8 +1679,9 @@ def _wifi_from_request() -> list[dict]:
 def handle_parent_ping(kind: str, *, wifi: list[dict] | None = None, detail: str = "") -> dict:
     loc = family.geolocate(wifi)
     place = loc.get("place") or "unknown area"
+    maps_url = str(loc.get("maps_url") or "")
     if kind == "sos":
-        message = detail.strip() or "Help requested"
+        message = detail.strip() or family.SOS_IMESSAGE
         title = "VoxPin help"
         body = f"{message} near {place}"
         status = "Help sent"
@@ -1693,21 +1694,29 @@ def handle_parent_ping(kind: str, *, wifi: list[dict] | None = None, detail: str
         kind,
         body,
         place=place,
-        maps_url=loc.get("maps_url"),
+        maps_url=maps_url or None,
         lat=loc.get("lat"),
         lon=loc.get("lon"),
     )
     store.add_recording(kind, body, when=place)
-    family.notify_parent(title, body)
-    print(f"{kind}: {body} {loc.get('maps_url')}")
+    notify = family.notify_parent(title, body, kind=kind, maps_url=maps_url)
+    if kind == "sos":
+        if notify.get("imessage"):
+            status = "Help sent"
+        elif notify.get("configured"):
+            status = "Msg failed"
+        else:
+            status = "No iMessage"
+    print(f"{kind}: {body} {maps_url} imessage={notify}")
     return {
         "alert": alert,
         "place": place,
-        "maps_url": loc.get("maps_url"),
+        "maps_url": maps_url or None,
         "lat": loc.get("lat"),
         "lon": loc.get("lon"),
         "status": status,
         "source": loc.get("source"),
+        "imessage": bool(notify.get("imessage")),
     }
 
 
