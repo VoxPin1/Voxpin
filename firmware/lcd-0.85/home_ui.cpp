@@ -164,7 +164,7 @@ static void update_home_labels(void)
              days[timeinfo.tm_wday], months[timeinfo.tm_mon], timeinfo.tm_mday, ampm);
   } else {
     snprintf(time_text, sizeof(time_text), "--:--");
-    snprintf(date_text, sizeof(date_text), "waiting NTP");
+    date_text[0] = '\0';
   }
 
   if (charging) {
@@ -309,8 +309,8 @@ void home_ui_begin(void)
   lv_obj_set_style_text_align(event_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_label_set_long_mode(event_label, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(event_label, LCD_WIDTH - 8);
-  lv_obj_set_height(event_label, 40);
-  lv_obj_align(event_label, LV_ALIGN_TOP_MID, 0, 66);
+  lv_obj_set_height(event_label, 36);
+  lv_obj_align_to(event_label, date_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
   lv_label_set_text(event_label, "Calendar...");
 
   status_label = lv_label_create(scr);
