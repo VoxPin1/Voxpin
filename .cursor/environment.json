@@ -1,0 +1,17 @@
+{
+  "name": "VoxPin companion backend",
+  "install": "./.cursor/install.sh",
+  "terminals": [
+    {
+      "name": "voice-notes-server",
+      "command": "cd backend/voice_notes && exec .venv/bin/python app.py",
+      "description": "Flask companion web app (notes, translation, calendar) on http://127.0.0.1:8765/"
+    }
+  ],
+  "ports": [
+    {
+      "name": "voice-notes",
+      "port": 8765
+    }
+  ]
+}
