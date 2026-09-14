@@ -6,7 +6,7 @@
     <title>VoxPin</title>
     <meta
       name="description"
-      content="VoxPin companion — notes, translations, and device-synced tasks."
+      content="VoxPin — Think it, Jot it, Do it. A voice pin from Rian, Anay, and Nihar for notes, translation, reminders, and help — only when you ask."
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,270 +16,170 @@
     />
     <link rel="stylesheet" href="/static/css/styles.css" />
   </head>
-  <body>
-    <div class="alert-banner" id="alertBanner" hidden>
-      <div>
-        <strong id="alertBannerKind">Alert</strong>
-        <span id="alertBannerText"></span>
-      </div>
-      <a id="alertBannerMap" href="#" target="_blank" rel="noopener" hidden>Open map</a>
-      <button type="button" class="btn ghost small" id="alertBannerAck">Got it</button>
-    </div>
+  <body class="landing">
     <div class="atmosphere" aria-hidden="true">
       <div class="orb orb-a"></div>
       <div class="orb orb-b"></div>
       <div class="grain"></div>
     </div>
 
-    <header class="topbar">
-      <a class="mark" href="#top" aria-label="VoxPin home">
+    <header class="topbar landing-topbar">
+      <a class="mark" href="#about" aria-label="VoxPin home">
         <span class="mark-pin" aria-hidden="true"></span>
         VoxPin
       </a>
-      <nav class="tabs" role="tablist" aria-label="Companion sections">
-        <button class="tab is-active" role="tab" aria-selected="true" data-tab="recordings">
-          Notes
-        </button>
-        <button class="tab" role="tab" aria-selected="false" data-tab="language">
-          Language
-        </button>
-        <button class="tab" role="tab" aria-selected="false" data-tab="calendar">
-          Calendar
-        </button>
-        <button class="tab" role="tab" aria-selected="false" data-tab="alerts">
-          Alerts
-        </button>
-        <button class="tab" role="tab" aria-selected="false" data-tab="google">
-          Account
-        </button>
-        <button class="tab" role="tab" aria-selected="false" data-tab="device">
-          Device
-        </button>
+      <nav class="site-nav" aria-label="Page sections">
+        <a href="#about">About us</a>
+        <a href="#device">Device</a>
+        <a href="#discord">Discord</a>
       </nav>
-      <div class="topbar-end">
-        <button type="button" class="account-chip" id="accountStatus" title="Google account">
-          <img id="accountAvatar" alt="" hidden />
-          <span id="accountStatusText">Sign in</span>
-        </button>
-        <button type="button" class="device-chip" id="deviceStatus" title="Device connection">
-          <span class="pulse"></span>
-          <span id="deviceStatusText">Checking pin…</span>
-        </button>
-      </div>
     </header>
 
-    <main id="top">
-      <section class="hero" id="hero">
-        <div class="hero-copy">
+    <main>
+      <section class="about-band" id="about">
+        <div class="about-copy">
           <p class="brand">VoxPin</p>
-          <h1>Your pin’s voice, kept close.</h1>
+          <p class="slogan">Think it, Jot it, Do it</p>
+          <h1>A voice pin for the ideas we cannot afford to lose.</h1>
           <p class="lede">
-            Review notes and translations, set the language the pin speaks, and keep tasks in sync.
-            Help and location pings only go out when the pin asks — never live tracking.
+            We’re Rian, Anay, and Nihar. Together we’re building VoxPin: a small
+            device that turns what we say into notes, translations, reminders, and help —
+            without live tracking, and without storing audio clips.
           </p>
-          <div class="hero-actions">
-            <button class="btn primary" data-jump="recordings">Open notes</button>
-            <button class="btn ghost" data-jump="calendar">View calendar</button>
-          </div>
+          <p>
+            We have been friends for many years, and we enjoy working together. That
+            friendship is the reason this project exists. We already knew how we think,
+            how we argue, and how we finish things — so when we sat down to build
+            something of our own, we did not have to start from zero.
+          </p>
+          <p>
+            We look at the economy around us, and at everything people are rushing to
+            build right now, and it is easy to feel like the world is loud with products
+            that do not really matter.             We wanted to do something meaningful together:
+            something we would actually use and carry with us, that solves a real problem, and that we
+            would still be proud of years from now.
+          </p>
+          <p>
+            That problem is simple. Thoughts disappear. A phrase we need in another
+            language is gone before we can type it. A promise we made out loud never
+            makes it onto a calendar. We built VoxPin so a hold of the pin is enough —
+            think it, jot it, do it — and then the pin goes quiet again.
+          </p>
         </div>
-        <div class="hero-visual" aria-hidden="true">
-          <div class="wave-stage">
-            <svg class="wave" viewBox="0 0 400 160" preserveAspectRatio="none">
-              <path class="wave-path wave-back" d=""></path>
-              <path class="wave-path wave-mid" d=""></path>
-              <path class="wave-path wave-front" d=""></path>
-            </svg>
-            <div class="pin-silhouette">
-              <span class="pin-head"></span>
-              <span class="pin-body"></span>
+        <ul class="team-grid">
+          <li class="team-card">
+            <span class="team-mark" aria-hidden="true">R</span>
+            <strong>Rian</strong>
+            <p>
+              Rian has worked on many projects and enjoys coding as well as team building.
+              He also loves doing hands-on work.
+            </p>
+          </li>
+          <li class="team-card">
+            <span class="team-mark" aria-hidden="true">A</span>
+            <strong>Anay</strong>
+            <p>How VoxPin feels to use and how it talks back.</p>
+          </li>
+          <li class="team-card">
+            <span class="team-mark" aria-hidden="true">N</span>
+            <strong>Nihar</strong>
+            <p>Keeping features simple enough to ask for out loud.</p>
+          </li>
+        </ul>
+      </section>
+
+      <section class="device-band" id="device">
+        <div class="device-intro">
+          <p class="eyebrow">Our device</p>
+          <h2>A voice pin we can carry, tap, and talk to.</h2>
+          <p>
+            VoxPin is a small device with a tiny screen. Keep it wherever it is useful
+            and carry it with us. Hold to talk. The pin transcribes what we say and routes
+            it — a note, a translation, a reminder, or a check-in with family — then it
+            stops listening. We designed it so help is always one ask away, and never a
+            background stream.
+          </p>
+        </div>
+        <div class="device-stage">
+          <div class="hero-visual" aria-hidden="true">
+            <div class="wave-stage">
+              <svg class="wave" viewBox="0 0 400 160" preserveAspectRatio="none">
+                <path class="wave-path wave-back" d=""></path>
+                <path class="wave-path wave-mid" d=""></path>
+                <path class="wave-path wave-front" d=""></path>
+              </svg>
+              <div class="pin-silhouette">
+                <span class="pin-head"></span>
+                <span class="pin-body"></span>
+              </div>
             </div>
           </div>
+          <ul class="feature-list">
+            <li>
+              <strong>Take notes</strong>
+              <span>We say “take notes…” and the pin saves the words to our notes as text. The audio is not kept.</span>
+            </li>
+            <li>
+              <strong>Translate this</strong>
+              <span>We speak a phrase, the pin answers in the language we chose, and the translation is saved with our notes so we can come back to it.</span>
+            </li>
+            <li>
+              <strong>Remind me</strong>
+              <span>We set reminders by voice so they land on our calendar instead of getting lost in conversation.</span>
+            </li>
+            <li>
+              <strong>Help, only when asked</strong>
+              <span>A tap can share where we are. A hold can ask for help. Nothing is streamed in the background, and location is never live-tracked.</span>
+            </li>
+          </ul>
         </div>
       </section>
 
-      <section class="panel is-active" id="panel-recordings" role="tabpanel">
-        <div class="panel-head">
-          <h2>Notes</h2>
+      <section class="discord-band" id="discord">
+        <div class="discord-card">
+          <p class="eyebrow">Community</p>
+          <h2>Join us on Discord</h2>
           <p>
-            Phrases you asked the pin to translate, plus notes saved to
-            <a href="https://docs.google.com/document/d/1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8/edit?tab=t.0" target="_blank" rel="noopener">this Google Doc</a>.
-            No audio clips.
+            We’re building VoxPin in the open. Join our Discord to ask questions, share
+            ideas, and follow along with the three of us as we ship the pin.
           </p>
-        </div>
-        <div class="filter-row">
-          <button class="chip is-active" data-filter="all">All</button>
-          <button class="chip" data-filter="note">Notes</button>
-          <button class="chip" data-filter="translate">Translations</button>
-          <button class="chip" data-filter="task">Tasks</button>
-          <button class="chip" data-filter="timer">Timers</button>
-          <button class="chip" data-filter="weather">Weather</button>
-          <button class="chip" data-filter="ping">Location</button>
-          <button class="chip" data-filter="sos">Help</button>
-          <button class="icon-btn" id="refreshRecordings" aria-label="Refresh notes">
-            Refresh
-          </button>
-        </div>
-        <div class="recording-list" id="recordingList">
-          <p class="empty">Loading notes…</p>
-        </div>
-      </section>
-
-      <section class="panel" id="panel-language" role="tabpanel" hidden>
-        <div class="panel-head">
-          <h2>Translate to</h2>
-          <p>
-            Pick the language the pin should speak when you say “translate this…”.
-            Voice commands stay in English (“take notes…”, “remind me…”).
-          </p>
-        </div>
-        <div class="language-current" id="languageCurrent">
-          <span class="label">Pin speaks</span>
-          <strong id="languageName">—</strong>
-          <p class="language-greeting" id="languageGreeting" aria-live="polite"></p>
-        </div>
-        <div class="language-grid" id="languageGrid">
-          <p class="empty">Loading languages…</p>
-        </div>
-      </section>
-
-      <section class="panel" id="panel-calendar" role="tabpanel" hidden>
-        <div class="panel-head">
-          <h2>Calendar</h2>
-          <p>
-            Tasks and reminders from your pin, written to
-            <a href="https://calendar.google.com/calendar/u/0?cid=cmlhbmdhZGV5MTJAZ21haWwuY29t" target="_blank" rel="noopener">riangadey12@gmail.com</a>.
-          </p>
-        </div>
-        <div class="cal-toolbar">
-          <button class="icon-btn" id="calPrev" aria-label="Previous month">‹</button>
-          <h3 id="calMonthLabel">—</h3>
-          <button class="icon-btn" id="calNext" aria-label="Next month">›</button>
-          <button class="btn ghost small" id="calToday">Today</button>
-        </div>
-        <div class="cal-layout">
-          <div class="calendar" id="calendarGrid" aria-label="Month calendar"></div>
-          <aside class="day-detail">
-            <h3 id="dayTitle">Select a day</h3>
-            <ul class="event-list" id="dayEvents">
-              <li class="empty">No day selected.</li>
-            </ul>
-            <p class="cal-note" id="calNote"></p>
-          </aside>
-        </div>
-      </section>
-
-      <section class="panel" id="panel-alerts" role="tabpanel" hidden>
-        <div class="panel-head">
-          <h2>Family alerts</h2>
-          <p>
-            Only when the pin asks. Tap PLUS to share location; hold PLUS for help.
-            Keep this page open to see it instantly on the laptop.
-          </p>
-        </div>
-        <div class="recording-list" id="alertList">
-          <p class="empty">No alerts yet.</p>
-        </div>
-      </section>
-
-      <section class="panel" id="panel-google" role="tabpanel" hidden>
-        <div class="panel-head">
-          <h2>Account</h2>
-          <p>Sign in with Google to see your notes and calendar.</p>
-        </div>
-        <div class="google-status" id="googleStatus">
-          <p class="empty">Checking Google connection…</p>
-        </div>
-        <div class="google-card google-signin-card">
-          <button type="button" class="google-signin-btn" id="googleSignInBtn">
-            <svg viewBox="0 0 48 48" aria-hidden="true">
-              <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-              <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-              <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-              <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-            </svg>
-            Sign in with Google
-          </button>
-          <button type="button" class="btn ghost" id="googleSignOut" hidden>Sign out</button>
-          <p class="device-hint" id="googleSignInHint"></p>
-          <p class="hint">
-            <a id="googleDocLink" href="https://docs.google.com/document/d/1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8/edit?tab=t.0" target="_blank" rel="noopener">Open notes Doc</a>
-            ·
-            <a id="googleCalLink" href="https://calendar.google.com/calendar/u/0?cid=cmlhbmdhZGV5MTJAZ21haWwuY29t" target="_blank" rel="noopener">Open Calendar</a>
-          </p>
-        </div>
-      </section>
-
-      <section class="panel" id="panel-device" role="tabpanel" hidden>
-        <div class="panel-head">
-          <h2>Device</h2>
-          <p>
-            Pair your VoxPin over Bluetooth. This browser keeps your profile and settings, and
-            writes them to the pin when it’s connected.
-          </p>
-        </div>
-        <div class="device-card" id="deviceCard">
-          <div class="device-card-status">
-            <span class="device-dot" id="deviceDot"></span>
-            <div>
-              <strong id="deviceCardTitle">Not connected</strong>
-              <p id="deviceCardMeta">Pair your pin to sync status here.</p>
-            </div>
-          </div>
-          <div class="device-card-actions">
-            <button class="btn primary" id="btnConnectBt">Connect with Bluetooth</button>
-            <button class="btn ghost" id="btnForgetBt" hidden>Forget device</button>
-          </div>
-          <p class="device-hint" id="deviceHint"></p>
-          <p class="hint">
-            PLUS button: tap to share location with this laptop, hold about a second for help.
-            BOOT is still hold-to-talk. PWR turns the pin on from battery.
-          </p>
-        </div>
-        <div class="google-card" id="profileCard" hidden>
-          <h3>Profile</h3>
-          <p class="hint">
-            Saved in this browser. When Bluetooth is live, the same profile is stored on the pin.
-          </p>
-          <label class="hint" for="profileName">Display name</label>
-          <input id="profileName" type="text" maxlength="32" spellcheck="false" placeholder="VoxPin" />
-          <p class="hint" id="profileLanguageMeta"></p>
-          <div class="google-actions">
-            <button class="btn primary" id="saveProfile">Save profile</button>
-          </div>
-          <p class="device-hint" id="profileHint"></p>
+          <a class="btn primary discord-btn" href="https://discord.gg/aqfwBxJTF" target="_blank" rel="noopener">
+            Join our Discord
+          </a>
         </div>
       </section>
     </main>
 
-    <div class="modal-backdrop" id="btModal" hidden>
-      <div
-        class="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="btModalTitle"
-        aria-describedby="btModalDesc"
-      >
-        <p class="modal-eyebrow">Welcome to VoxPin</p>
-        <h2 id="btModalTitle">Connect your device</h2>
-        <p id="btModalDesc">
-          Pair your VoxPin over Bluetooth to get started. You’ll only need to do this once —
-          next time you open the site, your pin will already show as connected.
-        </p>
-        <div class="modal-actions">
-          <button class="btn primary" id="btModalConnect">Connect with Bluetooth</button>
-          <button class="btn ghost" id="btModalGoogle">Sign in with Google</button>
-          <button class="btn ghost" id="btModalLater">Not now</button>
-        </div>
-        <p class="modal-note" id="btModalNote"></p>
-      </div>
-    </div>
-
     <footer class="site-foot">
-      <span>VoxPin companion</span>
-      <span id="footerMeta"></span>
+      <span>VoxPin</span>
+      <span>Think it, Jot it, Do it</span>
     </footer>
 
-    <script src="https://accounts.google.com/gsi/client" async defer></script>
-    <script src="/static/js/app.js"></script>
+    <script>
+      (() => {
+        const paths = [...document.querySelectorAll(".wave-path")];
+        if (!paths.length) return;
+        let t = 0;
+        function frame() {
+          t += 0.035;
+          paths.forEach((path, i) => {
+            const amp = 18 + i * 8;
+            const freq = 0.018 + i * 0.004;
+            const phase = t * (0.8 + i * 0.25);
+            let d = "M 0 80";
+            for (let x = 0; x <= 400; x += 8) {
+              const y =
+                80 +
+                Math.sin(x * freq + phase) * amp +
+                Math.sin(x * 0.04 + phase * 1.4) * (amp * 0.25);
+              d += ` L ${x} ${y}`;
+            }
+            path.setAttribute("d", d);
+          });
+          requestAnimationFrame(frame);
+        }
+        frame();
+      })();
+    </script>
   </body>
 </html>

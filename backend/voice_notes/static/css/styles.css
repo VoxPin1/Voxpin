@@ -1058,6 +1058,216 @@ main {
   min-height: 1.2em;
 }
 
+.landing-topbar {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.site-nav {
+  justify-self: end;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.35rem 1.1rem;
+}
+
+.about-band {
+  padding: clamp(2.5rem, 8vh, 5rem) 0 3rem;
+}
+
+.site-nav a {
+  color: var(--mist);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.site-nav a:hover {
+  color: var(--paper);
+}
+
+body.landing .brand,
+body.landing .lede,
+body.landing .about-copy h1 {
+  animation: none;
+}
+
+.about-copy .brand {
+  color: #f4f8fb;
+  -webkit-text-fill-color: #f4f8fb;
+  background: none;
+  font-size: clamp(2.6rem, 7vw, 4.6rem);
+}
+
+.about-copy .slogan {
+  margin: 0.35rem 0 1.35rem;
+  color: var(--signal);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: clamp(1.05rem, 2.2vw, 1.35rem);
+  letter-spacing: 0.04em;
+}
+
+.about-copy h1 {
+  margin: 0;
+  max-width: 22ch;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.7rem, 3.6vw, 2.6rem);
+  letter-spacing: -0.04em;
+  line-height: 1.15;
+}
+
+.about-copy .lede,
+.about-copy p {
+  max-width: 62ch;
+  color: var(--mist);
+  line-height: 1.6;
+}
+
+.about-copy p {
+  margin: 1rem 0 0;
+}
+
+.about-copy .lede {
+  margin-top: 1.15rem;
+  color: var(--fog);
+  font-size: 1.08rem;
+}
+
+.team-grid {
+  list-style: none;
+  margin: 2.5rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.team-card {
+  margin: 0;
+  padding: 1.25rem 1.3rem;
+  border-radius: 20px;
+  border: 1px solid var(--line);
+  background: linear-gradient(145deg, rgba(24, 32, 46, 0.95), rgba(12, 18, 28, 0.92));
+}
+
+.team-mark {
+  display: grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  margin-bottom: 0.85rem;
+  border-radius: 50%;
+  background: rgba(62, 201, 176, 0.16);
+  color: var(--signal);
+  font-family: var(--font-display);
+  font-weight: 800;
+}
+
+.team-card strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+}
+
+.team-card p {
+  margin: 0.45rem 0 0;
+  color: var(--mist);
+  line-height: 1.45;
+}
+
+.device-band {
+  padding: 2rem 0 4rem;
+}
+
+.device-intro .eyebrow,
+.discord-card .eyebrow {
+  margin: 0 0 0.6rem;
+  color: var(--signal);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.device-intro h2,
+.discord-card h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 3vw, 2.1rem);
+  letter-spacing: -0.04em;
+}
+
+.device-intro p {
+  margin: 0.85rem 0 0;
+  max-width: 58ch;
+  color: var(--mist);
+  line-height: 1.6;
+}
+
+.device-stage {
+  margin-top: 1.75rem;
+  display: grid;
+  grid-template-columns: 0.9fr 1.1fr;
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.feature-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.feature-list li {
+  padding: 1rem 1.15rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(21, 28, 40, 0.72);
+}
+
+.feature-list strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.feature-list span {
+  color: var(--mist);
+  line-height: 1.45;
+}
+
+.discord-band {
+  padding: 0 0 3rem;
+}
+
+.discord-card {
+  padding: clamp(1.6rem, 4vw, 2.4rem);
+  border-radius: 28px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(600px 240px at 90% 0%, rgba(88, 101, 242, 0.22), transparent 55%),
+    linear-gradient(145deg, rgba(24, 32, 46, 0.95), rgba(12, 18, 28, 0.92));
+}
+
+.discord-card p {
+  margin: 0.8rem 0 0;
+  max-width: 46ch;
+  color: var(--mist);
+  line-height: 1.55;
+}
+
+.discord-btn {
+  display: inline-flex;
+  margin-top: 1.5rem;
+  text-decoration: none;
+}
+
+.landing .site-foot a {
+  color: var(--fog);
+}
+
 @media (max-width: 900px) {
   .topbar {
     grid-template-columns: 1fr;
@@ -1092,6 +1302,19 @@ main {
   }
 
   .recording {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-topbar {
+    grid-template-columns: 1fr;
+  }
+
+  .site-nav {
+    justify-self: start;
+  }
+
+  .team-grid,
+  .device-stage {
     grid-template-columns: 1fr;
   }
 }
