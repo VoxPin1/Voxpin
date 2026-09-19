@@ -1383,6 +1383,15 @@ body.landing .site-nav a:hover {
 body.landing .card-hero {
   min-height: auto;
   padding-top: clamp(1.5rem, 5vh, 3rem);
+  grid-template-columns: minmax(0, 1.2fr) minmax(220px, 0.8fr);
+  align-items: center;
+  column-gap: clamp(1.25rem, 4vw, 3.5rem);
+}
+
+body.landing .hero-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 body.landing .brand-row {
@@ -1420,7 +1429,7 @@ body.landing .slogan {
 }
 
 body.landing .hero-copy h1 {
-  max-width: 22ch;
+  max-width: 28ch;
   margin: 0.85rem 0 0;
   color: var(--ink);
   font-family: "Nunito", "Trebuchet MS", sans-serif;
@@ -1434,17 +1443,21 @@ body.landing .hero-copy h1 {
 body.landing .icon-features {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  margin: 1.8rem 0 0;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem 1.35rem;
+  width: 100%;
+  max-width: 34rem;
+  margin: 1.6rem 0 0;
   padding: 0;
 }
 
 body.landing .icon-features li {
   display: grid;
-  justify-items: center;
-  text-align: center;
-  gap: 0.55rem;
+  grid-template-columns: 2.6rem minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  text-align: left;
+  gap: 0.75rem;
   color: var(--ink);
   font-weight: 800;
   font-size: 0.92rem;
@@ -1454,8 +1467,8 @@ body.landing .icon-features li {
 body.landing .icon-bubble {
   display: grid;
   place-items: center;
-  width: 3.1rem;
-  height: 3.1rem;
+  width: 2.6rem;
+  height: 2.6rem;
   border-radius: 50%;
   background: var(--purple);
   color: #fff;
@@ -1476,7 +1489,8 @@ body.landing .icon-sos {
 body.landing .device-shot {
   display: grid;
   place-items: center;
-  min-height: 320px;
+  min-height: 0;
+  justify-self: center;
   animation: none;
 }
 
@@ -1596,6 +1610,7 @@ body.landing .feature-list li {
   border: 1px solid rgba(110, 86, 245, 0.16);
   background: #fff;
   box-shadow: 0 16px 40px rgba(90, 69, 232, 0.08);
+  height: 100%;
 }
 
 body.landing .team-mark {
@@ -1675,21 +1690,63 @@ body.landing .btn.primary:hover {
   background: #f3f0ff;
 }
 
+body.landing .card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+body.landing .card-actions .btn {
+  margin-top: 0;
+}
+
+body.landing .brand-card .btn.ghost {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.7);
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+body.landing .brand-card .btn.ghost:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
 body.landing .site-foot {
   color: var(--mist);
   border-top-color: rgba(110, 86, 245, 0.16);
   font-family: "Montserrat", "Trebuchet MS", sans-serif;
 }
 
+body.landing .site-foot a {
+  color: var(--purple);
+  font-weight: 800;
+  text-decoration: none;
+}
+
+body.landing .site-foot a:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 900px) {
-  body.landing .icon-features,
-  body.landing .device-band .feature-list {
+  body.landing .card-hero {
     grid-template-columns: 1fr;
   }
 
+  body.landing .icon-features,
+  body.landing .device-band .feature-list {
+    grid-template-columns: 1fr;
+    max-width: none;
+  }
+
   body.landing .icon-features li {
-    grid-template-columns: auto 1fr;
+    grid-template-columns: 2.6rem 1fr;
     justify-items: start;
     text-align: left;
+  }
+
+  body.landing .device-shot {
+    justify-self: start;
   }
 }
