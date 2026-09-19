@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 208" fill="none">
+  <defs>
+    <linearGradient id="pinFill" x1="80" y1="4" x2="80" y2="208">
+      <stop offset="0" stop-color="#8B7CFF" />
+      <stop offset="1" stop-color="#5A45E8" />
+    </linearGradient>
+    <radialGradient id="goldFill" cx="0.32" cy="0.28" r="0.78">
+      <stop offset="0" stop-color="#FFE39A" />
+      <stop offset="0.45" stop-color="#F4B133" />
+      <stop offset="1" stop-color="#D07A12" />
+    </radialGradient>
+  </defs>
+  <path
+    fill="url(#pinFill)"
+    d="M80 204C80 204 12 126 12 76a68 68 0 1 1 136 0c0 50-68 128-68 128z"
+  />
+  <path
+    fill="#fff"
+    transform="translate(21.2 30) scale(4.9)"
+    d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+  />
+  <circle cx="80" cy="66" r="16" fill="url(#goldFill)" />
+  <circle cx="74" cy="60" r="5" fill="#fff" opacity=".45" />
+</svg>

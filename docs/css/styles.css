@@ -1318,3 +1318,362 @@ body.landing .about-copy h1 {
     grid-template-columns: 1fr;
   }
 }
+
+/* Landing page: match the VoxPin cards and poster. */
+body.landing {
+  --ink: #16141f;
+  --mist: #5a5470;
+  --fog: #16141f;
+  --paper: #f7f5ff;
+  --purple: #6e56f5;
+  --purple-deep: #5a45e8;
+  --gold: #f4b133;
+  --signal: #6e56f5;
+  --line: rgba(110, 86, 245, 0.16);
+  color: var(--ink);
+  background: #f7f5ff;
+  font-family: "Nunito", "Trebuchet MS", sans-serif;
+}
+
+html:has(body.landing) {
+  scroll-padding-top: 5.5rem;
+}
+
+body.landing .atmosphere {
+  background:
+    radial-gradient(900px 640px at 88% 12%, rgba(110, 86, 245, 0.28), transparent 58%),
+    radial-gradient(620px 420px at 8% 0%, rgba(244, 177, 51, 0.12), transparent 50%),
+    #f7f5ff;
+}
+
+body.landing .orb-a {
+  background: rgba(110, 86, 245, 0.28);
+}
+
+body.landing .orb-b {
+  background: rgba(244, 177, 51, 0.18);
+}
+
+body.landing .topbar {
+  background: rgba(247, 245, 255, 0.92);
+  border-bottom: 1px solid rgba(110, 86, 245, 0.12);
+}
+
+body.landing .mark {
+  color: var(--ink);
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+body.landing .mark-logo {
+  width: 1.7rem;
+  height: auto;
+}
+
+body.landing .site-nav a {
+  color: var(--purple);
+  font-weight: 800;
+}
+
+body.landing .site-nav a:hover {
+  color: var(--purple-deep);
+}
+
+body.landing .card-hero {
+  min-height: auto;
+  padding-top: clamp(1.5rem, 5vh, 3rem);
+}
+
+body.landing .brand-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin: 0;
+}
+
+body.landing .brand-logo {
+  width: clamp(3.6rem, 8vw, 5.2rem);
+  height: auto;
+}
+
+body.landing .brand {
+  margin: 0;
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+  font-weight: 800;
+  font-size: clamp(2.8rem, 7vw, 4.8rem);
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+  background: none;
+  color: #111;
+  -webkit-text-fill-color: #111;
+  animation: none;
+}
+
+body.landing .slogan {
+  margin: 0.85rem 0 0;
+  color: var(--purple);
+  font-family: "Caveat", "Segoe Script", cursive;
+  font-weight: 700;
+  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  letter-spacing: 0.01em;
+}
+
+body.landing .hero-copy h1 {
+  max-width: 22ch;
+  margin: 0.85rem 0 0;
+  color: var(--ink);
+  font-family: "Nunito", "Trebuchet MS", sans-serif;
+  font-weight: 700;
+  font-size: clamp(1.15rem, 2.2vw, 1.45rem);
+  letter-spacing: 0;
+  line-height: 1.4;
+  animation: none;
+}
+
+body.landing .icon-features {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+  margin: 1.8rem 0 0;
+  padding: 0;
+}
+
+body.landing .icon-features li {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+  gap: 0.55rem;
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+body.landing .icon-bubble {
+  display: grid;
+  place-items: center;
+  width: 3.1rem;
+  height: 3.1rem;
+  border-radius: 50%;
+  background: var(--purple);
+  color: #fff;
+}
+
+body.landing .icon-bubble svg {
+  width: 1.35rem;
+  height: 1.35rem;
+}
+
+body.landing .device-shot {
+  display: grid;
+  place-items: center;
+  min-height: 320px;
+  animation: none;
+}
+
+body.landing .cube {
+  width: min(260px, 70vw);
+  aspect-ratio: 1;
+  padding: 1.1rem 1.1rem 1.2rem;
+  border-radius: 28px;
+  background: linear-gradient(160deg, #fbfbfd, #d9dbe3 70%, #c9ccd6);
+  box-shadow:
+    18px 28px 50px rgba(90, 69, 232, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+body.landing .cube-mics {
+  display: flex;
+  justify-content: center;
+  gap: 1.4rem;
+  margin-bottom: 0.55rem;
+}
+
+body.landing .cube-mics span {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: #9aa1b2;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+body.landing .cube-bezel {
+  height: calc(100% - 1.1rem);
+  padding: 0.7rem;
+  border-radius: 18px;
+  background: #2a2e38;
+}
+
+body.landing .lcd {
+  height: 100%;
+  border-radius: 10px;
+  padding: 0.7rem 0.65rem;
+  background: #07140f;
+  color: #d7ffe8;
+  font-family: ui-monospace, "Cascadia Mono", monospace;
+  box-shadow: inset 0 0 0 1px rgba(80, 255, 180, 0.12);
+}
+
+body.landing .lcd-bat {
+  height: 0.35rem;
+  border-radius: 99px;
+  background: rgba(80, 255, 180, 0.15);
+  overflow: hidden;
+}
+
+body.landing .lcd-bat i {
+  display: block;
+  width: 35%;
+  height: 100%;
+  background: #39d353;
+}
+
+body.landing .lcd-time {
+  margin: 0.85rem 0 0;
+  font-size: 1.85rem;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+}
+
+body.landing .lcd-date,
+body.landing .lcd-note {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: #9fe7c4;
+}
+
+body.landing .lcd-note {
+  margin-top: 0.7rem;
+  color: #7fdbff;
+}
+
+body.landing .eyebrow {
+  margin: 0 0 0.6rem;
+  color: var(--purple);
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+body.landing .about-copy h2,
+body.landing .device-intro h2 {
+  margin: 0;
+  max-width: 18ch;
+  color: var(--ink);
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+  font-weight: 800;
+  font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+  letter-spacing: -0.04em;
+}
+
+body.landing .about-copy .lede,
+body.landing .about-copy p,
+body.landing .device-intro p,
+body.landing .feature-list span,
+body.landing .team-card p {
+  color: var(--mist);
+}
+
+body.landing .about-copy .lede {
+  color: var(--ink);
+  font-weight: 800;
+}
+
+body.landing .team-card,
+body.landing .feature-list li {
+  border: 1px solid rgba(110, 86, 245, 0.16);
+  background: #fff;
+  box-shadow: 0 16px 40px rgba(90, 69, 232, 0.08);
+}
+
+body.landing .team-mark {
+  background: var(--purple);
+  color: #fff;
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+}
+
+body.landing .team-card strong,
+body.landing .feature-list strong {
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+  color: var(--ink);
+}
+
+body.landing .device-band .feature-list {
+  margin-top: 1.5rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+body.landing .brand-card {
+  background:
+    radial-gradient(700px 280px at 90% 0%, rgba(255, 255, 255, 0.16), transparent 55%),
+    linear-gradient(115deg, #6e56f5 0%, #7d63ff 48%, #8f6bff 100%);
+  border: 0;
+  color: #fff;
+  box-shadow: 0 24px 50px rgba(90, 69, 232, 0.28);
+}
+
+body.landing .brand-card p {
+  color: rgba(255, 255, 255, 0.88);
+  max-width: 40ch;
+}
+
+body.landing .brand-card .brand {
+  color: #fff;
+  -webkit-text-fill-color: #fff;
+  font-size: clamp(2.2rem, 5vw, 3.4rem);
+}
+
+body.landing .logo-disc {
+  display: grid;
+  place-items: center;
+  width: 4.2rem;
+  height: 4.2rem;
+  border-radius: 50%;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+body.landing .logo-disc img {
+  width: 2.2rem;
+  height: auto;
+}
+
+body.landing .tagline {
+  margin: 0.85rem 0 0;
+  color: #fff !important;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+body.landing .btn.primary {
+  background: #fff;
+  color: var(--purple-deep);
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+  font-weight: 800;
+}
+
+body.landing .btn.primary:hover {
+  background: #f3f0ff;
+}
+
+body.landing .site-foot {
+  color: var(--mist);
+  border-top-color: rgba(110, 86, 245, 0.16);
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+}
+
+@media (max-width: 900px) {
+  body.landing .icon-features,
+  body.landing .device-band .feature-list {
+    grid-template-columns: 1fr;
+  }
+
+  body.landing .icon-features li {
+    grid-template-columns: auto 1fr;
+    justify-items: start;
+    text-align: left;
+  }
+}

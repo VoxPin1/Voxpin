@@ -6,12 +6,13 @@
     <title>VoxPin</title>
     <meta
       name="description"
-      content="VoxPin — Think it, Jot it, Do it. A voice pin from Rian, Anay, and Nihar for notes, translation, reminders, and help — only when you ask."
+      content="VoxPin. Think it. Jot it. Do it. The voice AI pin that records, translates and keeps you on track."
     />
+    <link rel="icon" href="img/logo.svg?v=2" type="image/svg+xml" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Montserrat:wght@700;800&family=Nunito:wght@500;700;800&display=swap"
       rel="stylesheet"
     />
     <base href="/Voxpin/" />
@@ -21,12 +22,11 @@
     <div class="atmosphere" aria-hidden="true">
       <div class="orb orb-a"></div>
       <div class="orb orb-b"></div>
-      <div class="grain"></div>
     </div>
 
     <header class="topbar landing-topbar">
       <a class="mark" href="#about" aria-label="VoxPin home">
-        <span class="mark-pin" aria-hidden="true"></span>
+        <img class="mark-logo" src="img/logo.svg?v=2" alt="" />
         VoxPin
       </a>
       <nav class="site-nav" aria-label="Page sections">
@@ -37,34 +37,87 @@
     </header>
 
     <main>
+      <section class="hero card-hero" id="top">
+        <div class="hero-copy">
+          <p class="brand-row">
+            <img class="brand-logo" src="img/logo.svg?v=2" alt="" />
+            <span class="brand">VoxPin</span>
+          </p>
+          <p class="slogan">Think it. Jot it. Do it.</p>
+          <h1>The voice AI pin that records, translates and keeps you on track.</h1>
+          <ul class="icon-features">
+            <li>
+              <span class="icon-bubble" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"
+                    fill="currentColor"
+                  />
+                  <path
+                    d="M7 11a5 5 0 0 0 10 0M12 16v3M9 20h6"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  />
+                </svg>
+              </span>
+              <span>Record notes &amp; ideas</span>
+            </li>
+            <li>
+              <span class="icon-bubble" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" stroke-width="2" />
+                  <path d="M8 3v4M16 3v4M4 10h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+                  <path d="M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" />
+                </svg>
+              </span>
+              <span>Send invites to your calendar</span>
+            </li>
+            <li>
+              <span class="icon-bubble" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2" />
+                  <path d="M3 12h18M12 3c2.5 3 3.8 6 3.8 9s-1.3 6-3.8 9c-2.5-3-3.8-6-3.8-9s1.3-6 3.8-9Z" stroke="currentColor" stroke-width="2" />
+                </svg>
+              </span>
+              <span>Translate as you speak</span>
+            </li>
+          </ul>
+        </div>
+        <div class="device-shot" aria-hidden="true">
+          <div class="cube">
+            <div class="cube-mics"><span></span><span></span></div>
+            <div class="cube-bezel">
+              <div class="lcd">
+                <div class="lcd-bat"><i id="lcdBat"></i></div>
+                <p class="lcd-time" id="lcdTime">3:31</p>
+                <p class="lcd-date" id="lcdDate">Sat Sep 13</p>
+                <p class="lcd-note">Meet. Note. Go.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section class="about-band" id="about">
         <div class="about-copy">
-          <p class="brand">VoxPin</p>
-          <p class="slogan">Think it, Jot it, Do it</p>
-          <h1>A voice pin for the ideas we cannot afford to lose.</h1>
-          <p class="lede">
-            We’re Rian, Anay, and Nihar. Together we’re building VoxPin: a small
-            device that turns what we say into notes, translations, reminders, and help —
-            without live tracking, and without storing audio clips.
+          <p class="eyebrow">About us</p>
+          <h2>We are Rian, Anay, and Nihar.</h2>
+          <p class="lede">We are friends, and we made VoxPin.</p>
+          <p>
+            VoxPin is a small pin you hold and talk to. It can save notes, say
+            words in another language, set reminders, and ask for help. It only
+            listens when you ask. It does not keep the sound.
           </p>
           <p>
-            We have been friends for many years, and we enjoy working together. That
-            friendship is the reason this project exists. We already knew how we think,
-            how we argue, and how we finish things — so when we sat down to build
-            something of our own, we did not have to start from zero.
+            We have been friends for a long time. We like making stuff together.
+            We wanted to make something we would really use.
           </p>
           <p>
-            We look at the economy around us, and at everything people are rushing to
-            build right now, and it is easy to feel like the world is loud with products
-            that do not really matter.             We wanted to do something meaningful together:
-            something we would actually use and carry with us, that solves a real problem, and that we
-            would still be proud of years from now.
-          </p>
-          <p>
-            That problem is simple. Thoughts disappear. A phrase we need in another
-            language is gone before we can type it. A promise we made out loud never
-            makes it onto a calendar. We built VoxPin so a hold of the pin is enough —
-            think it, jot it, do it — and then the pin goes quiet again.
+            Sometimes you think of a thing and then you forget it. Or you hear
+            words in another language and they are gone before you can write
+            them down. That is why we made VoxPin. Think it. Jot it. Do it.
+            Then the pin gets quiet again.
           </p>
         </div>
         <ul class="team-grid">
@@ -72,114 +125,100 @@
             <span class="team-mark" aria-hidden="true">R</span>
             <strong>Rian</strong>
             <p>
-              Rian has worked on many projects and enjoys coding as well as team building.
-              He also loves doing hands-on work.
+              Rian likes to code and build things. He also likes making things
+              with his hands.
             </p>
           </li>
           <li class="team-card">
             <span class="team-mark" aria-hidden="true">A</span>
             <strong>Anay</strong>
-            <p>How VoxPin feels to use and how it talks back.</p>
+            <p>Anay works on how VoxPin feels and how it talks back.</p>
           </li>
           <li class="team-card">
             <span class="team-mark" aria-hidden="true">N</span>
             <strong>Nihar</strong>
-            <p>Keeping features simple enough to ask for out loud.</p>
+            <p>
+              Nihar helps keep things simple, so you can just say them out loud.
+            </p>
           </li>
         </ul>
       </section>
 
       <section class="device-band" id="device">
         <div class="device-intro">
-          <p class="eyebrow">Our device</p>
-          <h2>A voice pin we can carry, tap, and talk to.</h2>
+          <p class="eyebrow">Our pin</p>
+          <h2>Your ideas. Anywhere.</h2>
           <p>
-            VoxPin is a small device with a tiny screen. Keep it wherever it is useful
-            and carry it with us. Hold to talk. The pin transcribes what we say and routes
-            it — a note, a translation, a reminder, or a check-in with family — then it
-            stops listening. We designed it so help is always one ask away, and never a
-            background stream.
+            VoxPin has a tiny screen. You can keep it with you. Hold it to talk.
+            It writes down what you say and can turn it into a note, a
+            translation, or a calendar invite. Then it stops listening.
           </p>
         </div>
-        <div class="device-stage">
-          <div class="hero-visual" aria-hidden="true">
-            <div class="wave-stage">
-              <svg class="wave" viewBox="0 0 400 160" preserveAspectRatio="none">
-                <path class="wave-path wave-back" d=""></path>
-                <path class="wave-path wave-mid" d=""></path>
-                <path class="wave-path wave-front" d=""></path>
-              </svg>
-              <div class="pin-silhouette">
-                <span class="pin-head"></span>
-                <span class="pin-body"></span>
-              </div>
-            </div>
-          </div>
-          <ul class="feature-list">
-            <li>
-              <strong>Take notes</strong>
-              <span>We say “take notes…” and the pin saves the words to our notes as text. The audio is not kept.</span>
-            </li>
-            <li>
-              <strong>Translate this</strong>
-              <span>We speak a phrase, the pin answers in the language we chose, and the translation is saved with our notes so we can come back to it.</span>
-            </li>
-            <li>
-              <strong>Remind me</strong>
-              <span>We set reminders by voice so they land on our calendar instead of getting lost in conversation.</span>
-            </li>
-            <li>
-              <strong>Help, only when asked</strong>
-              <span>A tap can share where we are. A hold can ask for help. Nothing is streamed in the background, and location is never live-tracked.</span>
-            </li>
-          </ul>
-        </div>
+        <ul class="feature-list">
+          <li>
+            <strong>Record notes &amp; ideas</strong>
+            <span>Say take notes and the pin saves the words as text. It does not save the sound.</span>
+          </li>
+          <li>
+            <strong>Translate as you speak</strong>
+            <span>Say a phrase. The pin says it in the language you picked.</span>
+          </li>
+          <li>
+            <strong>Send invites to your calendar</strong>
+            <span>Say a reminder out loud and it goes on your calendar so you do not forget.</span>
+          </li>
+        </ul>
       </section>
 
       <section class="discord-band" id="discord">
-        <div class="discord-card">
-          <p class="eyebrow">Community</p>
-          <h2>Join us on Discord</h2>
-          <p>
-            We’re building VoxPin in the open. Join our Discord to ask questions, share
-            ideas, and follow along with the three of us as we ship the pin.
-          </p>
-          <a class="btn primary discord-btn" href="https://discord.gg/aqfwBxJTF" target="_blank" rel="noopener">
-            Join our Discord
-          </a>
+        <div class="discord-card brand-card">
+          <div class="brand-card-copy">
+            <p class="brand-row on-purple">
+              <span class="logo-disc">
+                <img src="img/logo.svg?v=2" alt="" />
+              </span>
+              <span class="brand">VoxPin</span>
+            </p>
+            <p class="tagline">Your ideas. Anywhere.</p>
+            <p>
+              We are still making VoxPin. Come to our Discord to ask questions,
+              share ideas, and see what the three of us are doing.
+            </p>
+            <a
+              class="btn primary discord-btn"
+              href="https://discord.gg/aqfwBxJTF"
+              target="_blank"
+              rel="noopener"
+            >
+              Learn more
+            </a>
+          </div>
         </div>
       </section>
     </main>
 
     <footer class="site-foot">
       <span>VoxPin</span>
-      <span>Think it, Jot it, Do it</span>
+      <span>Think it. Jot it. Do it.</span>
     </footer>
 
     <script>
       (() => {
-        const paths = [...document.querySelectorAll(".wave-path")];
-        if (!paths.length) return;
-        let t = 0;
-        function frame() {
-          t += 0.035;
-          paths.forEach((path, i) => {
-            const amp = 18 + i * 8;
-            const freq = 0.018 + i * 0.004;
-            const phase = t * (0.8 + i * 0.25);
-            let d = "M 0 80";
-            for (let x = 0; x <= 400; x += 8) {
-              const y =
-                80 +
-                Math.sin(x * freq + phase) * amp +
-                Math.sin(x * 0.04 + phase * 1.4) * (amp * 0.25);
-              d += ` L ${x} ${y}`;
-            }
-            path.setAttribute("d", d);
+        const timeEl = document.getElementById("lcdTime");
+        const dateEl = document.getElementById("lcdDate");
+        if (!timeEl || !dateEl) return;
+        function tick() {
+          const now = new Date();
+          timeEl.textContent = now.toLocaleTimeString(undefined, {
+            hour: "numeric",
+            minute: "2-digit",
           });
-          requestAnimationFrame(frame);
+          const weekday = now.toLocaleDateString(undefined, { weekday: "short" });
+          const month = now.toLocaleDateString(undefined, { month: "short" });
+          dateEl.textContent = `${weekday} ${month} ${now.getDate()}`;
         }
-        frame();
+        tick();
+        setInterval(tick, 1000);
       })();
     </script>
   </body>
