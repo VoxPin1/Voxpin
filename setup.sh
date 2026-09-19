@@ -88,10 +88,6 @@ if [[ ! -d "${ROOT}/ESP32-S3-LCD-0.85/.git" && ! -d "${ROOT}/ESP32-S3-LCD-0.85/e
   echo "Cloning Waveshare LCD examples…"
   git clone --depth 1 https://github.com/waveshareteam/ESP32-S3-LCD-0.85.git "${ROOT}/ESP32-S3-LCD-0.85"
 fi
-if [[ ! -d "${ROOT}/ESP32-S3-ePaper-1.54/.git" && ! -d "${ROOT}/ESP32-S3-ePaper-1.54/02_Example" ]]; then
-  echo "Cloning Waveshare audio examples…"
-  git clone --depth 1 https://github.com/waveshareteam/ESP32-S3-ePaper-1.54.git "${ROOT}/ESP32-S3-ePaper-1.54"
-fi
 
 if [[ "$(uname -s)" == "Darwin" ]]; then
   "${HELPER}/install-helper.sh"

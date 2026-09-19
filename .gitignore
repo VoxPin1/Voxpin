@@ -1,12 +1,10 @@
 .tools/
-ESP32-S3-ePaper-1.54/
 ESP32-S3-LCD-0.85/
+ESP32-S3-ePaper-1.54/
 arduino-libraries/
 **/build/
 **/.venv/
 firmware/wifi-test/wifi_secrets.h
-firmware/smoke-test/wifi_secrets.h
-firmware/smoke-test/backend_config.h
 firmware/lcd-0.85/wifi_secrets.h
 firmware/lcd-0.85/backend_config.h
 backend/voice_notes/credentials.json

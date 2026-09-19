@@ -11,7 +11,7 @@ FQBN='esp32:esp32:esp32s3:CDCOnBoot=cdc,FlashMode=qio,FlashSize=8M,PartitionSche
 SRC="${ROOT}/firmware/lcd-0.85"
 SKETCH="${ROOT}/ESP32-S3-LCD-0.85/example/Arduino-3.2.0/examples/voxpin_lcd"
 LIBS="${ROOT}/ESP32-S3-LCD-0.85/example/Arduino-3.2.0/libraries"
-AUDIO_SRC="${ROOT}/ESP32-S3-ePaper-1.54/02_Example/Arduino/08_Audio_Test"
+AUDIO_SRC="${SRC}/src"
 PORT="${PORT:-/dev/cu.usbmodem1101}"
 
 detect_port() {
@@ -63,8 +63,8 @@ sync_sketch() {
   fi
 
   rm -rf "${SKETCH}/src/codec_board" "${SKETCH}/src/esp_codec_dev"
-  cp -R "${AUDIO_SRC}/src/codec_board" "${SKETCH}/src/codec_board"
-  cp -R "${AUDIO_SRC}/src/esp_codec_dev" "${SKETCH}/src/esp_codec_dev"
+  cp -R "${AUDIO_SRC}/codec_board" "${SKETCH}/src/codec_board"
+  cp -R "${AUDIO_SRC}/esp_codec_dev" "${SKETCH}/src/esp_codec_dev"
   cp "${SRC}/board_cfg.h" "${SKETCH}/src/codec_board/board_cfg.h"
 
   cp "${ROOT}/ESP32-S3-LCD-0.85/example/Arduino-3.2.0/examples/08_lvgl_arduino_v8/lv_conf.h" "${LIBS}/lv_conf.h"

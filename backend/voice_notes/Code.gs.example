@@ -1,5 +1,6 @@
 const SECRET = "replace-with-apps-script-secret";
 const DOCUMENT_ID = "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8";
+const TRANSLATIONS_DOCUMENT_ID = "1pC-qGeyFBYQv93zwTt15dQTiMnJz6yCgQYGWPQwiCoc";
 
 function doPost(e) {
   try {
@@ -8,10 +9,21 @@ function doPost(e) {
       return jsonOut({ ok: false, error: "bad secret" });
     }
 
+    const kind = data.kind || "note";
+    const docId =
+      data.document_id ||
+      data.documentId ||
+      (kind === "translate" ? TRANSLATIONS_DOCUMENT_ID : DOCUMENT_ID);
     const dayTitle = data.day || formatDay(new Date());
-    const result = bodyForDay(DOCUMENT_ID, dayTitle);
+    const result = bodyForDay(docId, dayTitle);
     result.body.appendParagraph(data.text);
-    return jsonOut({ ok: true, tab: dayTitle, mode: result.mode });
+    return jsonOut({
+      ok: true,
+      tab: dayTitle,
+      mode: result.mode,
+      kind: kind,
+      document_id: docId,
+    });
   } catch (err) {
     return jsonOut({ ok: false, error: String(err) });
   }

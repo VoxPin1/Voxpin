@@ -23,16 +23,14 @@ A public preview of the companion UI is on GitHub Pages: [https://voxpin1.github
 
 ## Quick start
 
-1. Clone the official Waveshare examples (not stored in this repo):
+Plug the pin in over USB, then:
 
-   ```bash
-   git clone https://github.com/waveshareteam/ESP32-S3-ePaper-1.54.git
-   ```
+```bash
+./setup.sh
+```
 
-2. Copy bundled libraries and apply the smoke-test firmware patch — see [EPAPER_SMOKE_TEST.md](EPAPER_SMOKE_TEST.md). For full agent context, see [CONTEXT_VAULT.md](CONTEXT_VAULT.md).
+That writes Wi‑Fi and SOS secrets, clones the Waveshare LCD examples, and flashes. To flash later:
 
-3. Build and flash:
-
-   ```bash
-   ./epaper-smoke.sh flash
-   ```
+```bash
+./lcd-0.85.sh flash
+```

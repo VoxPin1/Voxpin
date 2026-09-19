@@ -2,4 +2,4 @@ board_manager:
     additional_urls: []
 
 directories:
-    user: /Users/riangadey/voxpin/arduino-libraries
+    user: /Users/riangadey/Voxpin/ESP32-S3-LCD-0.85/example/Arduino-3.2.0

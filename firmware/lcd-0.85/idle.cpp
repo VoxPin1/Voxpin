@@ -72,13 +72,8 @@ static void leave_sleep(void)
   home_ui_set_paused(false);
   audio_pa_enable(true);
   ble_companion_wake();
-  home_ui_set_status("Waking");
-  if (wifi_connect_begin(28000)) {
-    home_ui_sync_time_from_ntp();
-    home_ui_set_status("");
-  } else {
-    home_ui_set_status("No WiFi");
-  }
+  home_ui_set_status_for("Waking", 700);
+  wifi_wake_start();
 }
 
 void idle_wake_sync(void)
@@ -86,7 +81,7 @@ void idle_wake_sync(void)
   if (idle_mux == NULL) {
     return;
   }
-  if (xSemaphoreTake(idle_mux, pdMS_TO_TICKS(28000)) != pdTRUE) {
+  if (xSemaphoreTake(idle_mux, pdMS_TO_TICKS(1500)) != pdTRUE) {
     return;
   }
   leave_sleep();
@@ -152,9 +147,9 @@ static void idle_task(void *arg)
         }
       } else if (!wifi_is_connected()) {
         static uint32_t last_retry_ms = 0;
-        if (millis() - last_retry_ms > 15000) {
+        if (millis() - last_retry_ms > 2000) {
           last_retry_ms = millis();
-          wifi_reconnect(20000);
+          wifi_wake_start();
         }
       }
     }

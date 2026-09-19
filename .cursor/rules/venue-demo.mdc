@@ -1,0 +1,6 @@
+---
+description: When the user is at a venue or asks for demo Wi-Fi, run ./venue.sh
+alwaysApply: true
+---
+
+If the user says they are at the venue, asks for demo setup, or types `/venue`, run `./venue.sh` with full permissions. That joins this Mac to the phone hotspot and starts the helper. Do not flash the pin unless asked. Do not print the hotspot password.

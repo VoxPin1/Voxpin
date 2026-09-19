@@ -42,6 +42,14 @@ DOCUMENT_URL = os.environ.get(
     "VOXPIN_DOCUMENT_URL",
     f"https://docs.google.com/document/d/{DOCUMENT_ID}/edit?tab=t.0",
 )
+TRANSLATIONS_DOCUMENT_ID = os.environ.get(
+    "VOXPIN_TRANSLATIONS_DOCUMENT_ID",
+    "1pC-qGeyFBYQv93zwTt15dQTiMnJz6yCgQYGWPQwiCoc",
+)
+TRANSLATIONS_DOCUMENT_URL = os.environ.get(
+    "VOXPIN_TRANSLATIONS_DOCUMENT_URL",
+    f"https://docs.google.com/document/d/{TRANSLATIONS_DOCUMENT_ID}/edit",
+)
 # Primary calendar for reminders + companion month view (from your Calendar share link).
 CALENDAR_ID = os.environ.get("VOXPIN_CALENDAR_ID", "riangadey12@gmail.com")
 CALENDAR_URL = os.environ.get(
@@ -50,7 +58,7 @@ CALENDAR_URL = os.environ.get(
 )
 DOC_SCOPES = ["https://www.googleapis.com/auth/documents"]
 CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar"]
-SCOPES = CALENDAR_SCOPES  # reminders / next-event / companion calendar
+SCOPES = CALENDAR_SCOPES + DOC_SCOPES
 DEFAULT_PORT = 8765
 BEACON_PORT = 8766
 TIMEZONE = os.environ.get("VOXPIN_TZ", "America/Los_Angeles")
@@ -222,15 +230,21 @@ def user_oauth_credentials(interactive: bool = True):
     if os.path.exists(TOKEN_PATH):
         creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
     if creds and creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        with open(TOKEN_PATH, "w") as token:
-            token.write(creds.to_json())
-    if creds and creds.valid and creds.has_scopes(CALENDAR_SCOPES):
+        try:
+            creds.refresh(Request())
+            with open(TOKEN_PATH, "w") as token:
+                token.write(creds.to_json())
+        except Exception as err:
+            print(f"Google token refresh failed ({type(err).__name__}); sign-in needed")
+            creds = None
+    if creds and creds.valid and creds.has_scopes(SCOPES):
+        return creds
+    if creds and creds.valid and creds.has_scopes(CALENDAR_SCOPES) and not interactive:
         return creds
     if not interactive:
         raise RuntimeError("Google Calendar login required. Run: ./run.sh --login")
     flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_PATH, SCOPES)
-    creds = flow.run_local_server(port=0)
+    creds = flow.run_local_server(port=0, prompt="consent")
     with open(TOKEN_PATH, "w") as token:
         token.write(creds.to_json())
     return creds
@@ -248,7 +262,23 @@ def webhook_config():
     return url, secret
 
 
+def docs_api_ready() -> bool:
+    try:
+        creds = docs_credentials(interactive=False)
+        if creds is None:
+            return False
+        if _is_service_account_file(SERVICE_ACCOUNT_PATH) or _is_service_account_file(
+            CREDENTIALS_PATH
+        ):
+            return True
+        return creds.has_scopes(DOC_SCOPES)
+    except Exception:
+        return False
+
+
 def docs_ready() -> bool:
+    if docs_api_ready():
+        return True
     if webhook_config():
         return True
     if os.path.exists(SERVICE_ACCOUNT_PATH) or _is_service_account_file(CREDENTIALS_PATH):
@@ -407,15 +437,31 @@ def create_calendar_event(title: str, start: datetime) -> dict:
     }
 
 
-def append_via_webhook(text: str, url: str, secret: str) -> None:
+def append_via_webhook(
+    text: str,
+    url: str,
+    secret: str,
+    document_id: str | None = None,
+    kind: str = "note",
+) -> None:
     import json
     import urllib.request
 
     now = datetime.now()
     stamp = now.strftime("%Y-%m-%d %-I:%M %p")
     day = now.strftime("%b %-d, %Y")
+    if not document_id:
+        document_id = (
+            TRANSLATIONS_DOCUMENT_ID if kind == "translate" else DOCUMENT_ID
+        )
     payload = json.dumps(
-        {"secret": secret, "text": f"{stamp}\n{text}\n\n", "day": day}
+        {
+            "secret": secret,
+            "text": f"{stamp}\n{text}\n\n",
+            "day": day,
+            "kind": kind,
+            "document_id": document_id,
+        }
     ).encode("utf-8")
     req = urllib.request.Request(
         url,
@@ -429,30 +475,64 @@ def append_via_webhook(text: str, url: str, secret: str) -> None:
         raise RuntimeError(body.get("error", "Apps Script append failed"))
 
 
-def append_to_doc(text: str) -> None:
-    hook = webhook_config()
-    if hook:
-        append_via_webhook(text, hook[0], hook[1])
-        return
-
+def _append_via_docs_api(text: str, document_id: str) -> None:
     service = docs_service()
-    document = service.documents().get(documentId=DOCUMENT_ID).execute()
-    end_index = document["body"]["content"][-1]["endIndex"]
+    document = service.documents().get(
+        documentId=document_id, includeTabsContent=True
+    ).execute()
     stamp = datetime.now().strftime("%Y-%m-%d %-I:%M %p")
     payload = f"{stamp}\n{text}\n\n"
+    tab_id = None
+    end_index = None
+    tabs = document.get("tabs") or []
+    if tabs:
+        tab = tabs[0]
+        tab_id = (tab.get("tabProperties") or {}).get("tabId")
+        content = (
+            ((tab.get("documentTab") or {}).get("body") or {}).get("content") or []
+        )
+        if content:
+            end_index = content[-1].get("endIndex")
+    if end_index is None:
+        end_index = document["body"]["content"][-1]["endIndex"]
+    location = {"index": end_index - 1}
+    if tab_id:
+        location["tabId"] = tab_id
     service.documents().batchUpdate(
-        documentId=DOCUMENT_ID,
+        documentId=document_id,
         body={
             "requests": [
                 {
                     "insertText": {
-                        "location": {"index": end_index - 1},
+                        "location": location,
                         "text": payload,
                     }
                 }
             ]
         },
     ).execute()
+
+
+def append_to_doc(
+    text: str, document_id: str | None = None, kind: str = "note"
+) -> None:
+    if not document_id:
+        document_id = (
+            TRANSLATIONS_DOCUMENT_ID if kind == "translate" else DOCUMENT_ID
+        )
+    # The deployed Apps Script still writes every kind into the notes Doc.
+    # Use the Docs API when this Mac has document scope so translations land
+    # in the translations Doc.
+    if docs_api_ready():
+        _append_via_docs_api(text, document_id)
+        return
+    hook = webhook_config()
+    if hook:
+        append_via_webhook(
+            text, hook[0], hook[1], document_id=document_id, kind=kind
+        )
+        return
+    _append_via_docs_api(text, document_id)
 
 
 def pcm_stats(pcm: bytes, sample_width: int = 2) -> dict:
@@ -1224,31 +1304,31 @@ def translate_text(text: str, source_lang: str, target_lang: str) -> str:
         gtx_rate_limited = "429" in err_s
         print(f"translate gtx failed: {err}")
 
-    # 2) MyMemory (short timeout; skip if Google is actively rate-limiting us)
-    if not gtx_rate_limited:
-        try:
-            src = MYMEMORY_LOCALES.get(source_lang, MYMEMORY_LOCALES.get(source, "en-US"))
-            dst = MYMEMORY_LOCALES.get(target_lang, MYMEMORY_LOCALES.get(target, "en-US"))
-            query = urllib.parse.urlencode({"q": text, "langpair": f"{src}|{dst}"})
-            url = f"https://api.mymemory.translated.net/get?{query}"
-            with urllib.request.urlopen(url, timeout=2.5) as resp:
-                payload = json_lib.loads(resp.read().decode("utf-8"))
-            out = ((payload.get("responseData") or {}).get("translatedText") or "").strip()
-            if out and "MYMEMORY WARNING" not in out.upper():
-                return _remember(out)
-        except Exception as err:
-            print(f"translate mymemory failed: {err}")
-
-    # 4) Last resort: deep_translator scrape
+    # 2) MyMemory — use this when Google gtx is down or rate-limited.
     try:
-        from deep_translator import GoogleTranslator
-
-        out = GoogleTranslator(source=source, target=target).translate(text)
-        out = (out or "").strip()
-        if out:
+        src = MYMEMORY_LOCALES.get(source_lang, MYMEMORY_LOCALES.get(source, "en-US"))
+        dst = MYMEMORY_LOCALES.get(target_lang, MYMEMORY_LOCALES.get(target, "en-US"))
+        query = urllib.parse.urlencode({"q": text, "langpair": f"{src}|{dst}"})
+        url = f"https://api.mymemory.translated.net/get?{query}"
+        with urllib.request.urlopen(url, timeout=4) as resp:
+            payload = json_lib.loads(resp.read().decode("utf-8"))
+        out = ((payload.get("responseData") or {}).get("translatedText") or "").strip()
+        if out and "MYMEMORY WARNING" not in out.upper():
             return _remember(out)
     except Exception as err:
-        raise RuntimeError(f"translation failed: {err}") from err
+        print(f"translate mymemory failed: {err}")
+
+    # Last resort: another Google scrape. Skip if gtx already 429'd us.
+    if not gtx_rate_limited:
+        try:
+            from deep_translator import GoogleTranslator
+
+            out = GoogleTranslator(source=source, target=target).translate(text)
+            out = (out or "").strip()
+            if out:
+                return _remember(out)
+        except Exception as err:
+            print(f"translate deep_translator failed: {err}")
 
     raise RuntimeError("translation failed: empty result")
 
@@ -1257,10 +1337,12 @@ def translate_from_english(text: str, target_lang: str) -> str:
     return translate_text(text, "en", target_lang)
 
 
-def append_to_doc_later(text: str) -> None:
+def append_to_doc_later(
+    text: str, document_id: str | None = None, kind: str = "note"
+) -> None:
     def _run() -> None:
         try:
-            append_to_doc(text)
+            append_to_doc(text, document_id=document_id, kind=kind)
         except Exception as err:
             print(f"note saved locally only (Docs error): {err}", flush=True)
 
@@ -1385,8 +1467,15 @@ def json_action(action: str, *, status: str | None = None, **payload):
 
 
 @app.get("/")
+@app.get("/index.html")
 def index():
     return send_from_directory(STATIC_DIR, "index.html")
+
+
+@app.get("/companion")
+@app.get("/companion.html")
+def companion():
+    return send_from_directory(STATIC_DIR, "companion.html")
 
 
 @app.get("/health")
@@ -1439,6 +1528,8 @@ def api_google_status():
             "has_token": os.path.exists(TOKEN_PATH),
             "document_id": DOCUMENT_ID,
             "document_url": DOCUMENT_URL,
+            "translations_document_id": TRANSLATIONS_DOCUMENT_ID,
+            "translations_document_url": TRANSLATIONS_DOCUMENT_URL,
             "calendar_id": CALENDAR_ID,
             "calendar_url": CALENDAR_URL,
         }
@@ -1515,7 +1606,7 @@ def api_google_connect():
         return (
             "<h1>Missing OAuth client</h1>"
             "<p>Calendar needs a Google Cloud <strong>Desktop</strong> OAuth client JSON. "
-            "Paste it on the companion <a href='/#google'>Google</a> tab → Save credentials, "
+            "Paste it on the companion <a href='/companion.html#google'>Account</a> tab → Save credentials, "
             "then Sign in again.</p>"
             "<p>(Apps Script alone covers Docs notes, not Calendar.)</p>",
             400,
@@ -1527,7 +1618,7 @@ def api_google_connect():
             "<p><code>credentials.json</code> is a service account. Calendar sign-in needs an "
             "OAuth client JSON with an <code>installed</code> or <code>web</code> key "
             "(Google Cloud → Credentials → Create OAuth client → Desktop app).</p>"
-            "<p><a href='/#google'>Back to Google tab</a></p>",
+            "<p><a href='/companion.html#google'>Back to Account tab</a></p>",
             400,
             {"Content-Type": "text/html; charset=utf-8"},
         )
@@ -1536,11 +1627,11 @@ def api_google_connect():
     except Exception as err:
         return (
             f"<h1>Google login failed</h1><pre>{err}</pre>"
-            "<p><a href='/'>Back to VoxPin</a></p>",
+            "<p><a href='/companion.html'>Back to VoxPin companion</a></p>",
             500,
             {"Content-Type": "text/html; charset=utf-8"},
         )
-    return redirect("/?google=connected")
+    return redirect("/companion.html?google=connected")
 
 
 @app.get("/api/recordings")
@@ -1783,14 +1874,19 @@ def note():
 
         if action == "note":
             store.add_recording("note", text)
-            append_to_doc_later(f"Note: {text}")
+            append_to_doc_later(f"Note: {text}", kind="note")
             print(f"note: {text}", flush=True)
             return spoken_pcm_response("Notes added.", "note", "Saved", sample_rate)
 
         if action == "remind":
             if not calendar_ready():
                 print("remind needs Google Calendar login")
-                return json_action("need_login")
+                return spoken_pcm_response(
+                    "Sign in to Google Calendar on the Mac companion.",
+                    "need_login",
+                    "Sign in",
+                    sample_rate,
+                )
             title, when = parse_reminder(text)
             created = create_calendar_event(title, when)
             store.add_recording("task", title, when=created["when"])
@@ -1860,10 +1956,24 @@ def note():
             return resp
 
         t0 = datetime.now(timezone.utc)
-        translated = translate_text(text, source, target).strip()
+        try:
+            translated = translate_text(text, source, target).strip()
+        except Exception as err:
+            print(f"translate failed: {err}", flush=True)
+            return spoken_pcm_response(
+                "Translation is busy. Try again in a moment.",
+                "translate",
+                "Try again",
+                sample_rate,
+            )
         t1 = datetime.now(timezone.utc)
         if not translated:
-            return jsonify({"ok": False, "error": "empty translation"}), 500
+            return spoken_pcm_response(
+                "Translation is busy. Try again in a moment.",
+                "translate",
+                "Try again",
+                sample_rate,
+            )
         spoken = speak_translated_pcm(translated, target, sample_rate, 1)
         t2 = datetime.now(timezone.utc)
         if not spoken:
@@ -1874,7 +1984,11 @@ def note():
             translation=translated,
             language=target_name,
         )
-        append_to_doc_later(f"Translate ({target_name}): {text} → {translated}")
+        append_to_doc_later(
+            f"Translate ({target_name}): {text} → {translated}",
+            document_id=TRANSLATIONS_DOCUMENT_ID,
+            kind="translate",
+        )
         print(f"{source.upper()}: {text}")
         print(f"{target.upper()}: {translated}")
         print(
@@ -1905,14 +2019,14 @@ def main() -> int:
     parser.add_argument(
         "--login",
         action="store_true",
-        help="Open browser to connect Google Docs and Google Calendar",
+        help="Open a browser so this Mac can add reminders and write translations to Google",
     )
     parser.add_argument("--port", type=int, default=int(os.environ.get("PORT", DEFAULT_PORT)))
     args = parser.parse_args()
 
     if args.login:
         user_oauth_credentials(interactive=True)
-        print("Google Calendar connected. You can start the server without --login next time.")
+        print("Google Calendar and Docs connected. You can start the server without --login next time.")
         return 0
 
     if not docs_ready():
@@ -1924,7 +2038,8 @@ def main() -> int:
 
     print(f"Listening on 0.0.0.0:{args.port}")
     print(f"Companion website: http://127.0.0.1:{args.port}/")
-    print(f"Appending to document {DOCUMENT_ID}")
+    print(f"Notes Doc {DOCUMENT_ID}")
+    print(f"Translations Doc {TRANSLATIONS_DOCUMENT_ID}")
     if calendar_ready():
         print("Google Calendar connected — next event and reminders enabled")
     else:

@@ -9,6 +9,9 @@
 #include <WiFiClientSecure.h>
 #include <WiFiUdp.h>
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 char g_backend_host[64] = BACKEND_HOST;
 int g_backend_port = BACKEND_PORT;
 char g_backend_scheme[8] = BACKEND_SCHEME;
@@ -320,6 +323,41 @@ bool wifi_reconnect(uint32_t timeout_ms)
     return true;
   }
   return wifi_connect_begin(timeout_ms);
+}
+
+static volatile bool wifi_wake_running = false;
+
+static void wifi_wake_task(void *arg)
+{
+  (void)arg;
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.begin();
+  const uint32_t start = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start) < 3000) {
+    vTaskDelay(pdMS_TO_TICKS(40));
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    join_known_networks(0);
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    if (!probe_health(g_backend_host, g_backend_port, g_backend_scheme)) {
+      backend_discover(1200);
+    }
+  }
+  wifi_wake_running = false;
+  vTaskDelete(NULL);
+}
+
+void wifi_wake_start(void)
+{
+  if (WiFi.status() == WL_CONNECTED || wifi_wake_running) {
+    return;
+  }
+  wifi_wake_running = true;
+  if (xTaskCreatePinnedToCore(wifi_wake_task, "wifi_wake", 8 * 1024, NULL, 3, NULL, 0) != pdPASS) {
+    wifi_wake_running = false;
+  }
 }
 
 void wifi_radio_off(void)

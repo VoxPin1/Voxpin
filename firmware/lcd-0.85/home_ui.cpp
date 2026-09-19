@@ -33,6 +33,7 @@ static lv_obj_t *event_label = NULL;
 static lv_obj_t *status_label = NULL;
 static char last_event_text[96] = "";
 static uint32_t last_event_fetch_ms = 0;
+static uint32_t status_clear_at = 0;
 static volatile bool ui_paused = false;
 
 static bool ui_lock(int timeout_ms)
@@ -185,6 +186,12 @@ static void lvgl_task(void *arg)
   (void)arg;
   for (;;) {
     if (!ui_paused && ui_lock(-1)) {
+      if (status_clear_at != 0 && (int32_t)(millis() - status_clear_at) >= 0) {
+        status_clear_at = 0;
+        if (status_label != NULL) {
+          lv_label_set_text(status_label, "");
+        }
+      }
       lv_timer_handler();
       ui_unlock();
     }
@@ -224,8 +231,17 @@ void home_ui_set_status(const char *text)
     return;
   }
   if (ui_lock(200)) {
+    status_clear_at = 0;
     lv_label_set_text(status_label, (text != NULL) ? text : "");
     ui_unlock();
+  }
+}
+
+void home_ui_set_status_for(const char *text, uint32_t ms)
+{
+  home_ui_set_status(text);
+  if (ms > 0) {
+    status_clear_at = millis() + ms;
   }
 }
 
@@ -293,24 +309,29 @@ void home_ui_begin(void)
   lv_obj_set_style_text_font(time_label, &lv_font_montserrat_28, 0);
   lv_obj_set_style_text_color(time_label, lv_color_white(), 0);
   lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_pad_all(time_label, 0, 0);
+  lv_obj_set_style_pad_bottom(time_label, 0, 0);
   lv_obj_set_width(time_label, LCD_WIDTH);
-  lv_obj_align(time_label, LV_ALIGN_TOP_MID, 0, 16);
+  lv_obj_align(time_label, LV_ALIGN_TOP_MID, 0, 14);
 
   date_label = lv_label_create(scr);
   lv_obj_set_style_text_font(date_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(date_label, lv_color_hex(0xBBBBBB), 0);
   lv_obj_set_style_text_align(date_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_pad_all(date_label, 0, 0);
   lv_obj_set_width(date_label, LCD_WIDTH);
-  lv_obj_align(date_label, LV_ALIGN_TOP_MID, 0, 48);
+  lv_obj_align_to(date_label, time_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);
 
   event_label = lv_label_create(scr);
   lv_obj_set_style_text_font(event_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(event_label, lv_color_hex(0x7FDBFF), 0);
   lv_obj_set_style_text_align(event_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_pad_all(event_label, 0, 0);
+  lv_obj_set_style_text_line_space(event_label, 0, 0);
   lv_label_set_long_mode(event_label, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(event_label, LCD_WIDTH - 8);
-  lv_obj_set_height(event_label, 36);
-  lv_obj_align_to(event_label, date_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
+  lv_obj_set_height(event_label, 50);
+  lv_obj_align_to(event_label, date_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
   lv_label_set_text(event_label, "Calendar...");
 
   status_label = lv_label_create(scr);

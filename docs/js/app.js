@@ -17,6 +17,8 @@
   ].join(" ");
   const DEFAULT_DOC_ID = "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8";
   const DEFAULT_DOC_URL = `https://docs.google.com/document/d/${DEFAULT_DOC_ID}/edit?tab=t.0`;
+  const TRANSLATIONS_DOC_ID = "1pC-qGeyFBYQv93zwTt15dQTiMnJz6yCgQYGWPQwiCoc";
+  const TRANSLATIONS_DOC_URL = `https://docs.google.com/document/d/${TRANSLATIONS_DOC_ID}/edit`;
   const CALENDAR_ID = "riangadey12@gmail.com";
   const CALENDAR_URL =
     "https://calendar.google.com/calendar/u/0?cid=cmlhbmdhZGV5MTJAZ21haWwuY29t";
@@ -76,6 +78,7 @@
       accessToken: "",
       tokenClient: null,
     },
+    lastAlertId: "",
   };
 
   const els = {
@@ -86,6 +89,7 @@
       calendar: document.getElementById("panel-calendar"),
       google: document.getElementById("panel-google"),
       device: document.getElementById("panel-device"),
+      alerts: document.getElementById("panel-alerts"),
     },
     deviceStatus: document.getElementById("deviceStatus"),
     deviceStatusText: document.getElementById("deviceStatusText"),
@@ -99,6 +103,7 @@
     calNote: document.getElementById("calNote"),
     googleStatus: document.getElementById("googleStatus"),
     googleDocLink: document.getElementById("googleDocLink"),
+    googleTranslationsLink: document.getElementById("googleTranslationsLink"),
     googleCalLink: document.getElementById("googleCalLink"),
     googleSignInBtn: document.getElementById("googleSignInBtn"),
     googleSignInHint: document.getElementById("googleSignInHint"),
@@ -128,6 +133,12 @@
     deviceCardTitle: document.getElementById("deviceCardTitle"),
     deviceCardMeta: document.getElementById("deviceCardMeta"),
     deviceHint: document.getElementById("deviceHint"),
+    alertList: document.getElementById("alertList"),
+    alertBanner: document.getElementById("alertBanner"),
+    alertBannerKind: document.getElementById("alertBannerKind"),
+    alertBannerText: document.getElementById("alertBannerText"),
+    alertBannerMap: document.getElementById("alertBannerMap"),
+    alertBannerAck: document.getElementById("alertBannerAck"),
   };
 
   function bluetoothSupported() {
@@ -464,6 +475,9 @@
           continue;
         }
         const parsed = parseStoredNote(text, parseDayStamp(ctx.day));
+        if (ctx.defaultKind && parsed.kind === "note") {
+          parsed.kind = ctx.defaultKind;
+        }
         notes.push({
           id: `gdoc-${notes.length}-${parsed.text.slice(0, 24)}`,
           kind: parsed.kind,
@@ -484,12 +498,15 @@
     }
   }
 
-  function notesFromGoogleDoc(doc) {
+  function notesFromGoogleDoc(doc, opts = {}) {
     const notes = [];
-    const ctx = { day: "" };
+    const ctx = { day: "", defaultKind: opts.defaultKind || "" };
     walkDocContent(doc.body?.content, notes, ctx);
     for (const tab of doc.tabs || []) {
-      const tabCtx = { day: tab.tabProperties?.title || ctx.day };
+      const tabCtx = {
+        day: tab.tabProperties?.title || ctx.day,
+        defaultKind: ctx.defaultKind,
+      };
       walkDocContent(tab.documentTab?.body?.content, notes, tabCtx);
     }
     return notes
@@ -514,18 +531,32 @@
 
   function setPinnedGoogleLinks(docUrl, calUrl) {
     if (els.googleDocLink) els.googleDocLink.href = docUrl || DEFAULT_DOC_URL;
+    if (els.googleTranslationsLink) {
+      els.googleTranslationsLink.href = TRANSLATIONS_DOC_URL;
+    }
     if (els.googleCalLink) els.googleCalLink.href = calUrl || CALENDAR_URL;
   }
 
   async function loadNotesFromGoogleDoc() {
-    const docId = DEFAULT_DOC_ID;
     if (els.googleDocLink) {
       els.googleDocLink.href = DEFAULT_DOC_URL;
     }
-    const doc = await googleGet(
-      `https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}?includeTabsContent=true`
+    if (els.googleTranslationsLink) {
+      els.googleTranslationsLink.href = TRANSLATIONS_DOC_URL;
+    }
+    const notesDoc = await googleGet(
+      `https://docs.googleapis.com/v1/documents/${encodeURIComponent(DEFAULT_DOC_ID)}?includeTabsContent=true`
     );
-    state.recordings = notesFromGoogleDoc(doc);
+    let translations = [];
+    try {
+      const transDoc = await googleGet(
+        `https://docs.googleapis.com/v1/documents/${encodeURIComponent(TRANSLATIONS_DOC_ID)}?includeTabsContent=true`
+      );
+      translations = notesFromGoogleDoc(transDoc, { defaultKind: "translate" });
+    } catch (err) {
+      console.warn("translations doc", err);
+    }
+    state.recordings = mergeNotes(notesFromGoogleDoc(notesDoc), translations);
     renderRecordings();
     if (els.footerMeta && isPublicStaticHost()) {
       els.footerMeta.textContent = `${state.recordings.length} notes`;
@@ -874,6 +905,7 @@
     if (name === "calendar") renderCalendar();
     if (name === "google") loadGoogleStatus();
     if (name === "device") updateDeviceUi();
+    if (name === "alerts") loadAlerts({ silent: true });
     if (scroll) {
       document.getElementById(`panel-${name}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }
@@ -955,6 +987,85 @@
     }
   }
 
+  function renderAlerts(alerts) {
+    if (!els.alertList) return;
+    if (!alerts.length) {
+      els.alertList.innerHTML = '<p class="empty">No help or location pings yet.</p>';
+      return;
+    }
+    els.alertList.innerHTML = alerts
+      .map((item) => {
+        const map = item.maps_url
+          ? `<p class="meta"><a href="${escapeAttr(item.maps_url)}" target="_blank" rel="noopener">Open map</a></p>`
+          : "";
+        return `
+          <article class="recording">
+            <span class="kind-badge ${escapeAttr(item.kind)}">${kindLabel(item.kind)}</span>
+            <div>
+              <h3>${escapeHtml(item.message || "")}</h3>
+              ${item.place ? `<p class="meta">${escapeHtml(item.place)}</p>` : ""}
+              ${map}
+            </div>
+            <time datetime="${escapeAttr(item.created_at || "")}">${formatWhen(item.created_at)}</time>
+          </article>`;
+      })
+      .join("");
+  }
+
+  function showAlertBanner(item) {
+    if (!els.alertBanner || !item) return;
+    els.alertBanner.hidden = false;
+    els.alertBanner.classList.toggle("is-ping", item.kind === "ping");
+    if (els.alertBannerKind) els.alertBannerKind.textContent = kindLabel(item.kind);
+    if (els.alertBannerText) els.alertBannerText.textContent = item.message || "";
+    if (els.alertBannerMap) {
+      if (item.maps_url) {
+        els.alertBannerMap.hidden = false;
+        els.alertBannerMap.href = item.maps_url;
+      } else {
+        els.alertBannerMap.hidden = true;
+      }
+    }
+  }
+
+  function desktopNotify(item) {
+    if (!item || typeof Notification === "undefined") return;
+    if (Notification.permission !== "granted") return;
+    try {
+      new Notification(item.kind === "sos" ? "VoxPin help" : "VoxPin location", {
+        body: item.message || "",
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function loadAlerts({ silent = false } = {}) {
+    if (isPublicStaticHost()) return;
+    try {
+      const data = await api("/api/alerts");
+      const alerts = data.alerts || [];
+      renderAlerts(alerts);
+      const newest = alerts[0];
+      if (newest && newest.id && newest.id !== state.lastAlertId) {
+        const first = !state.lastAlertId;
+        state.lastAlertId = newest.id;
+        if (!first) {
+          showAlertBanner(newest);
+          if (Notification.permission === "default") {
+            Notification.requestPermission().then(() => desktopNotify(newest));
+          } else {
+            desktopNotify(newest);
+          }
+        }
+      }
+    } catch (err) {
+      if (!silent && els.alertList) {
+        els.alertList.innerHTML = `<p class="empty">${escapeHtml(err.message)}</p>`;
+      }
+    }
+  }
+
   async function api(path, options) {
     if (isPublicStaticHost()) {
       throw new Error(STATIC_HOST_NOTE);
@@ -999,6 +1110,10 @@
   function kindLabel(kind) {
     if (kind === "translate") return "Translate";
     if (kind === "task") return "Task";
+    if (kind === "timer") return "Timer";
+    if (kind === "weather") return "Weather";
+    if (kind === "ping") return "Location";
+    if (kind === "sos") return "Help";
     return "Note";
   }
 
@@ -1008,7 +1123,7 @@
     );
     if (!items.length) {
       els.recordingList.innerHTML =
-        '<p class="empty">No notes yet. Ask the pin to translate a phrase, or add one in your Google Doc.</p>';
+        '<p class="empty">No notes yet. Say “take notes…” to save to the notes Doc, or “translate this…” to save to the translations Doc.</p>';
       return;
     }
     els.recordingList.innerHTML = items
@@ -1020,7 +1135,13 @@
               }</p>`
             : r.kind === "task" && r.when
               ? `<p class="meta">Due ${escapeHtml(r.when)}</p>`
-              : "";
+              : r.kind === "timer" && r.when
+                ? `<p class="meta">Rings ${escapeHtml(r.when)}</p>`
+                : (r.kind === "ping" || r.kind === "sos") && r.when
+                  ? `<p class="meta">${escapeHtml(r.when)}</p>`
+                  : r.kind === "weather" && r.when
+                    ? `<p class="meta">${escapeHtml(r.when)}</p>`
+                    : "";
         return `
           <article class="recording" data-id="${escapeAttr(r.id)}">
             <span class="kind-badge ${escapeAttr(r.kind)}">${kindLabel(r.kind)}</span>
@@ -1357,6 +1478,11 @@
     document.getElementById("refreshRecordings")?.addEventListener("click", () => {
       loadRecordings();
       loadStatus();
+      loadAlerts({ silent: true });
+    });
+
+    els.alertBannerAck?.addEventListener("click", () => {
+      if (els.alertBanner) els.alertBanner.hidden = true;
     });
 
     els.recordingList.addEventListener("click", async (e) => {
@@ -1551,7 +1677,7 @@
       activateTab("recordings");
     }
     await restoreBluetooth();
-    await Promise.all([loadStatus(), loadRecordings(), loadLanguages(), loadCalendar(), loadGoogleStatus()]);
+    await Promise.all([loadStatus(), loadRecordings(), loadLanguages(), loadCalendar(), loadGoogleStatus(), loadAlerts({ silent: true })]);
     if (isPublicStaticHost() && els.footerMeta) {
       els.footerMeta.textContent = state.google.user
         ? `Signed in as ${state.google.user.email || state.google.user.name}`
@@ -1571,6 +1697,7 @@
       loadCalendar();
       loadGoogleStatus();
     }, 20000);
+    setInterval(() => loadAlerts({ silent: true }), 4000);
   }
 
   boot();

@@ -17,6 +17,8 @@
   ].join(" ");
   const DEFAULT_DOC_ID = "1dReqYodsf53bGHCZMvZzoxCcWDqSbux4Fofj5hJ5LY8";
   const DEFAULT_DOC_URL = `https://docs.google.com/document/d/${DEFAULT_DOC_ID}/edit?tab=t.0`;
+  const TRANSLATIONS_DOC_ID = "1pC-qGeyFBYQv93zwTt15dQTiMnJz6yCgQYGWPQwiCoc";
+  const TRANSLATIONS_DOC_URL = `https://docs.google.com/document/d/${TRANSLATIONS_DOC_ID}/edit`;
   const CALENDAR_ID = "riangadey12@gmail.com";
   const CALENDAR_URL =
     "https://calendar.google.com/calendar/u/0?cid=cmlhbmdhZGV5MTJAZ21haWwuY29t";
@@ -101,7 +103,7 @@
     calNote: document.getElementById("calNote"),
     googleStatus: document.getElementById("googleStatus"),
     googleDocLink: document.getElementById("googleDocLink"),
-    googleCalLink: document.getElementById("googleCalLink"),
+    googleTranslationsLink: document.getElementById("googleTranslationsLink"),
     googleCalLink: document.getElementById("googleCalLink"),
     googleSignInBtn: document.getElementById("googleSignInBtn"),
     googleSignInHint: document.getElementById("googleSignInHint"),
@@ -473,6 +475,9 @@
           continue;
         }
         const parsed = parseStoredNote(text, parseDayStamp(ctx.day));
+        if (ctx.defaultKind && parsed.kind === "note") {
+          parsed.kind = ctx.defaultKind;
+        }
         notes.push({
           id: `gdoc-${notes.length}-${parsed.text.slice(0, 24)}`,
           kind: parsed.kind,
@@ -493,12 +498,15 @@
     }
   }
 
-  function notesFromGoogleDoc(doc) {
+  function notesFromGoogleDoc(doc, opts = {}) {
     const notes = [];
-    const ctx = { day: "" };
+    const ctx = { day: "", defaultKind: opts.defaultKind || "" };
     walkDocContent(doc.body?.content, notes, ctx);
     for (const tab of doc.tabs || []) {
-      const tabCtx = { day: tab.tabProperties?.title || ctx.day };
+      const tabCtx = {
+        day: tab.tabProperties?.title || ctx.day,
+        defaultKind: ctx.defaultKind,
+      };
       walkDocContent(tab.documentTab?.body?.content, notes, tabCtx);
     }
     return notes
@@ -523,15 +531,32 @@
 
   function setPinnedGoogleLinks(docUrl, calUrl) {
     if (els.googleDocLink) els.googleDocLink.href = docUrl || DEFAULT_DOC_URL;
+    if (els.googleTranslationsLink) {
+      els.googleTranslationsLink.href = TRANSLATIONS_DOC_URL;
+    }
     if (els.googleCalLink) els.googleCalLink.href = calUrl || CALENDAR_URL;
   }
 
   async function loadNotesFromGoogleDoc() {
-    const docId = DEFAULT_DOC_ID;
-    const doc = await googleGet(
-      `https://docs.googleapis.com/v1/documents/${encodeURIComponent(docId)}?includeTabsContent=true`
+    if (els.googleDocLink) {
+      els.googleDocLink.href = DEFAULT_DOC_URL;
+    }
+    if (els.googleTranslationsLink) {
+      els.googleTranslationsLink.href = TRANSLATIONS_DOC_URL;
+    }
+    const notesDoc = await googleGet(
+      `https://docs.googleapis.com/v1/documents/${encodeURIComponent(DEFAULT_DOC_ID)}?includeTabsContent=true`
     );
-    state.recordings = notesFromGoogleDoc(doc);
+    let translations = [];
+    try {
+      const transDoc = await googleGet(
+        `https://docs.googleapis.com/v1/documents/${encodeURIComponent(TRANSLATIONS_DOC_ID)}?includeTabsContent=true`
+      );
+      translations = notesFromGoogleDoc(transDoc, { defaultKind: "translate" });
+    } catch (err) {
+      console.warn("translations doc", err);
+    }
+    state.recordings = mergeNotes(notesFromGoogleDoc(notesDoc), translations);
     renderRecordings();
     if (els.footerMeta && isPublicStaticHost()) {
       els.footerMeta.textContent = `${state.recordings.length} notes`;
@@ -1098,7 +1123,7 @@
     );
     if (!items.length) {
       els.recordingList.innerHTML =
-        '<p class="empty">No notes yet. Ask the pin to translate a phrase, or add one in your Google Doc.</p>';
+        '<p class="empty">No notes yet. Say “take notes…” to save to the notes Doc, or “translate this…” to save to the translations Doc.</p>';
       return;
     }
     els.recordingList.innerHTML = items
