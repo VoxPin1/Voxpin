@@ -1434,7 +1434,7 @@ body.landing .hero-copy h1 {
 body.landing .icon-features {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 1rem;
   margin: 1.8rem 0 0;
   padding: 0;
@@ -1464,6 +1464,13 @@ body.landing .icon-bubble {
 body.landing .icon-bubble svg {
   width: 1.35rem;
   height: 1.35rem;
+}
+
+body.landing .icon-sos {
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
 }
 
 body.landing .device-shot {
@@ -1547,6 +1554,8 @@ body.landing .lcd-note {
 body.landing .lcd-note {
   margin-top: 0.7rem;
   color: #7fdbff;
+  font-size: 0.7rem;
+  line-height: 1.3;
 }
 
 body.landing .eyebrow {
@@ -1601,9 +1610,16 @@ body.landing .feature-list strong {
   color: var(--ink);
 }
 
+body.landing .team-role {
+  margin: 0.2rem 0 0;
+  color: var(--purple) !important;
+  font-weight: 800;
+  font-size: 0.82rem;
+}
+
 body.landing .device-band .feature-list {
   margin-top: 1.5rem;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 body.landing .brand-card {
