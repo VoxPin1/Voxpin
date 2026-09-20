@@ -1784,6 +1784,22 @@ body.landing .site-foot a:hover {
   text-decoration: underline;
 }
 
+body.landing .stack-guide {
+  margin-top: 1.5rem;
+}
+
+body.landing .stack-guide a {
+  color: var(--purple);
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
+  font-weight: 800;
+  text-decoration: none;
+  margin-right: 0.45rem;
+}
+
+body.landing .stack-guide a:hover {
+  text-decoration: underline;
+}
+
 @media (max-width: 900px) {
   body.landing .card-hero {
     grid-template-columns: 1fr;
