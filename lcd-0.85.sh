@@ -48,6 +48,8 @@ sync_sketch() {
   cp "${SRC}/idle.cpp" "$SKETCH/"
   cp "${SRC}/imu.h" "$SKETCH/"
   cp "${SRC}/imu.cpp" "$SKETCH/"
+  cp "${SRC}/reminder_alert.h" "$SKETCH/"
+  cp "${SRC}/reminder_alert.cpp" "$SKETCH/"
 
   if [[ -f "${SRC}/backend_config.h" ]]; then
     cp "${SRC}/backend_config.h" "$SKETCH/"

@@ -36,6 +36,7 @@ static constexpr uint32_t kMaxAfterReleaseBytes = kBytesPerSec * 2;
 
 static uint8_t *audio_buf = NULL;
 static voice_status_cb_t status_cb = NULL;
+static volatile bool voice_busy = false;
 
 static bool chunk_is_loud(const uint8_t *data, uint32_t len)
 {
@@ -312,6 +313,7 @@ static void voice_note_task(void *arg)
     }
 
     show_status("Recording", 0);
+    voice_busy = true;
     memset(audio_buf, 0, kMaxBytes);
     uint32_t written = 0;
     const uint32_t press_started = millis();
@@ -353,6 +355,7 @@ static void voice_note_task(void *arg)
     written = trim_pcm16(audio_buf, written);
 
     if (written < kMinBytes) {
+      voice_busy = false;
       show_status("Too short", 2000);
       show_status("", 0);
       continue;
@@ -360,8 +363,14 @@ static void voice_note_task(void *arg)
 
     show_status("Sending", 0);
     handle_clip(audio_buf, written);
+    voice_busy = false;
     show_status("", 0);
   }
+}
+
+bool voice_note_is_busy(void)
+{
+  return voice_busy;
 }
 
 void voice_note_init(void)

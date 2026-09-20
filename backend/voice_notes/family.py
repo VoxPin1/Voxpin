@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -40,7 +41,23 @@ WORD_NUM = {
     "fortyfive": 45,
     "forty-five": 45,
     "sixty": 60,
+    "ninety": 90,
 }
+
+_NUM_TOKEN = (
+    r"(?:\d+|a|an|one|two|three|four|five|six|seven|eight|nine|ten|"
+    r"eleven|twelve|thirteen|fourteen|fifteen|"
+    r"twenty|thirty|forty-five|fortyfive|forty|sixty|ninety)"
+)
+_UNIT_TOKEN = r"(?:minutes?|mins?|min|hours?|hrs?|hr)"
+_FIRST_DURATION = re.compile(rf"({_NUM_TOKEN})\s*({_UNIT_TOKEN})\b", re.I)
+_NEXT_DURATION = re.compile(rf"\s*(?:and|,)?\s*({_NUM_TOKEN})\s*({_UNIT_TOKEN})\b", re.I)
+_AND_A_HALF = re.compile(r"\s*(?:and\s+)?a\s+half\b", re.I)
+_DURATION_PREFIX = re.compile(
+    r"\b(?:(in|after)|(for|lasting|lasts)|((?:that\s+)?(?:is|lasts)))\s+$",
+    re.I,
+)
+_LONG_SUFFIX = re.compile(r"\s+long\b", re.I)
 
 
 def _http_json(url: str, *, data: dict | None = None, headers: dict | None = None) -> dict:
@@ -302,9 +319,73 @@ def parse_minutes(token: str) -> int | None:
     return WORD_NUM.get(token)
 
 
-def parse_timer(text: str) -> tuple[str, datetime, int]:
-    import re
+def _minutes_for_unit(amount: int, unit: str) -> int:
+    unit = (unit or "").lower()
+    if unit.startswith("hour") or unit.startswith("hr"):
+        return amount * 60
+    return amount
 
+
+def extract_spoken_duration(text: str) -> tuple[int | None, str, str | None]:
+    """Pull a spoken length like '1 hour and 30 min' out of text.
+
+    Returns (total minutes, leftover text, role). Role is 'delay' for in/after,
+    'length' for for/lasting, 'plain' when there is no cue, or None.
+    """
+    first = _FIRST_DURATION.search(text or "")
+    if not first:
+        return None, text, None
+
+    start = first.start()
+    role = "plain"
+    prefix = _DURATION_PREFIX.search(text[:start])
+    if prefix:
+        start = prefix.start()
+        if prefix.group(1):
+            role = "delay"
+        else:
+            role = "length"
+
+    total = 0
+    last_was_hours = False
+    pos = first.start()
+    while pos < len(text):
+        half = _AND_A_HALF.match(text, pos)
+        if half and last_was_hours:
+            total += 30
+            pos = half.end()
+            continue
+        pair = (
+            _FIRST_DURATION.match(text, pos)
+            if pos == first.start()
+            else _NEXT_DURATION.match(text, pos)
+        )
+        if not pair:
+            break
+        amount = parse_minutes(pair.group(1))
+        if amount is None:
+            break
+        unit = pair.group(2)
+        chunk = _minutes_for_unit(amount, unit)
+        total += chunk
+        last_was_hours = unit.lower().startswith("hour") or unit.lower().startswith("hr")
+        pos = pair.end()
+
+    long_suffix = _LONG_SUFFIX.match(text, pos)
+    if long_suffix:
+        pos = long_suffix.end()
+        role = "length"
+
+    if total <= 0:
+        return None, text, None
+    leftover = f"{text[:start]} {text[pos:]}"
+    leftover = re.sub(r"\s+", " ", leftover).strip(" ,.-")
+    leftover = re.sub(r"^(?:and|,)\s+", "", leftover, flags=re.I).strip(" ,.-")
+    leftover = re.sub(r"\s+(?:and|,)$", "", leftover, flags=re.I).strip(" ,.-")
+    return total, leftover, role
+
+
+def parse_timer(text: str) -> tuple[str, datetime, int]:
     now = datetime.now().astimezone()
     try:
         from zoneinfo import ZoneInfo
@@ -338,22 +419,10 @@ def parse_timer(text: str) -> tuple[str, datetime, int]:
         minutes = parse_minutes(till.group(1))
         leftover = leftover[: till.start()] + leftover[till.end() :]
 
-    dur = re.search(
-        r"\b((?:\d+)|a|an|one|two|three|four|five|six|seven|eight|nine|ten|"
-        r"fifteen|twenty|thirty)\s*(minutes?|mins?|hours?|hrs?)\b",
-        leftover,
-        re.I,
-    )
-    hours = 0
-    if dur and minutes is None:
-        amount = parse_minutes(dur.group(1)) or 1
-        unit = dur.group(2).lower()
-        if unit.startswith("hour") or unit.startswith("hr"):
-            hours = amount
-            minutes = 0
-        else:
-            minutes = amount
-        leftover = leftover[: dur.start()] + leftover[dur.end() :]
+    if minutes is None:
+        extracted, leftover, _role = extract_spoken_duration(leftover)
+        if extracted is not None:
+            minutes = extracted
 
     leftover = re.sub(
         r"\b(?:set\s+(?:a\s+)?timer|timer|countdown|for|more)\b",
@@ -366,5 +435,5 @@ def parse_timer(text: str) -> tuple[str, datetime, int]:
     title = leftover or "Timer"
     if minutes is None:
         minutes = 10
-    when = now + timedelta(minutes=minutes, hours=hours)
-    return title, when, minutes + hours * 60
+    when = now + timedelta(minutes=minutes)
+    return title, when, minutes

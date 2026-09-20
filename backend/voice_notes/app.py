@@ -62,6 +62,8 @@ SCOPES = CALENDAR_SCOPES + DOC_SCOPES
 DEFAULT_PORT = 8765
 BEACON_PORT = 8766
 TIMEZONE = os.environ.get("VOXPIN_TZ", "America/Los_Angeles")
+# Pin buzz+speak lead time. Device treats this as "about 10 minutes away".
+ALERT_LEAD_MINUTES = 10
 
 # gTTS language codes for common targets
 GTTS_LANG = {
@@ -325,6 +327,100 @@ def _format_event_when(start: dict) -> str:
     return datetime.combine(day, datetime.min.time()).strftime("%a %b %-d")
 
 
+def reminder_alert_due(
+    minutes_until: int | None,
+    all_day: bool,
+    lead: int = ALERT_LEAD_MINUTES,
+) -> bool:
+    """True when a timed reminder should buzz/speak on the pin."""
+    if all_day or minutes_until is None:
+        return False
+    return -1 <= minutes_until <= lead
+
+
+def reminder_spoken(title: str, when: str = "") -> str:
+    title = re.sub(r"\s+", " ", (title or "Reminder").strip()) or "Reminder"
+    when = re.sub(r"\s+", " ", (when or "").strip())
+    if when:
+        if re.search(r"\bat\b", when, re.I):
+            return f"Reminder. {title} {when}."
+        return f"Reminder. {title} at {when}."
+    return f"Reminder. {title}."
+
+
+def _lcd_title(title: str) -> str:
+    title = re.sub(r"\s+", " ", (title or "(No title)").replace("\n", " ").strip())
+    if len(title) > 48:
+        return title[:45] + "..."
+    return title
+
+
+def _minutes_until_iso(raw: str, now: datetime | None = None) -> int | None:
+    if not raw or "T" not in raw:
+        return None
+    now = now or now_local()
+    try:
+        stamp = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=_local_tz())
+        else:
+            stamp = stamp.astimezone(_local_tz())
+    except ValueError:
+        return None
+    return int((stamp - now).total_seconds() // 60)
+
+
+def _payload_from_google_event(event: dict) -> dict:
+    start_info = event.get("start") or {}
+    title = (event.get("summary") or "(No title)").replace("\n", " ").strip()
+    when = _format_event_when(start_info)
+    all_day = "date" in start_info and "dateTime" not in start_info
+    start_iso = ""
+    minutes = None
+    if "dateTime" in start_info:
+        try:
+            stamp = datetime.fromisoformat(
+                start_info["dateTime"].replace("Z", "+00:00")
+            ).astimezone(_local_tz())
+            start_iso = stamp.isoformat()
+            minutes = int((stamp - now_local()).total_seconds() // 60)
+        except ValueError:
+            minutes = None
+    return {
+        "when": when,
+        "title": _lcd_title(title),
+        "full_title": title,
+        "id": event.get("id", ""),
+        "start": start_iso,
+        "minutes_until": minutes,
+        "all_day": all_day,
+        "alert": reminder_alert_due(minutes, all_day),
+        "spoken": reminder_spoken(title, when),
+    }
+
+
+def _payload_from_range_event(event: dict, now: datetime | None = None) -> dict | None:
+    if event.get("all_day"):
+        return None
+    raw = event.get("start") or ""
+    minutes = _minutes_until_iso(raw, now)
+    if minutes is None:
+        return None
+    title = (event.get("title") or "Reminder").replace("\n", " ").strip()
+    when = event.get("when_label") or ""
+    return {
+        "when": when,
+        "title": _lcd_title(title),
+        "full_title": title,
+        "id": event.get("id") or "",
+        "start": raw,
+        "minutes_until": minutes,
+        "all_day": False,
+        "alert": reminder_alert_due(minutes, False),
+        "spoken": reminder_spoken(title, when),
+    }
+
+
 def fetch_next_event() -> dict | None:
     service = calendar_service()
     now = datetime.now(timezone.utc)
@@ -342,11 +438,31 @@ def fetch_next_event() -> dict | None:
     items = result.get("items") or []
     if not items:
         return None
-    event = items[0]
-    title = (event.get("summary") or "(No title)").replace("\n", " ").strip()
-    if len(title) > 48:
-        title = title[:45] + "..."
-    return {"when": _format_event_when(event.get("start") or {}), "title": title}
+    return _payload_from_google_event(items[0])
+
+
+def fetch_next_timed_event(within_hours: int = 24) -> dict | None:
+    """Soonest timed calendar item, used for pin buzz+speak stay-awake."""
+    if not calendar_ready():
+        return None
+    now = now_local()
+    events = fetch_calendar_range(
+        now - timedelta(minutes=1),
+        now + timedelta(hours=within_hours),
+        limit=12,
+    )
+    for event in events:
+        payload = _payload_from_range_event(event, now)
+        if payload is not None:
+            return payload
+    return None
+
+
+def fetch_due_reminder() -> dict | None:
+    event = fetch_next_timed_event(within_hours=1)
+    if event and event.get("alert"):
+        return event
+    return None
 
 
 def fetch_calendar_range(start: datetime, end: datetime, limit: int = 12) -> list[dict]:
@@ -414,9 +530,12 @@ def fetch_calendar_events(days: int = 60) -> list[dict]:
     return events
 
 
-def create_calendar_event(title: str, start: datetime) -> dict:
+def create_calendar_event(
+    title: str, start: datetime, duration_minutes: int | None = None
+) -> dict:
     service = calendar_service()
-    end = start + timedelta(minutes=15)
+    minutes = duration_minutes if duration_minutes and duration_minutes > 0 else 15
+    end = start + timedelta(minutes=minutes)
     body = {
         "summary": title,
         "start": {"dateTime": start.isoformat(), "timeZone": TIMEZONE},
@@ -434,6 +553,7 @@ def create_calendar_event(title: str, start: datetime) -> dict:
         "when": when_label,
         "title": title,
         "id": created.get("id", ""),
+        "minutes": minutes,
     }
 
 
@@ -779,10 +899,6 @@ TIME_QUERY = re.compile(
     r"\b(?:what(?:'s| is|s)\s+the\s+time|what\s+time\s+is\s+it|tell\s+me\s+the\s+time)\b",
     re.IGNORECASE,
 )
-IN_DURATION = re.compile(
-    r"\bin\s+(?:an?\s+)?(\d+)?\s*(minutes?|mins?|hours?|hrs?)\b",
-    re.IGNORECASE,
-)
 # "5 pm", "5:00 p.m.", "at 5pm" — am/pm required so bare numbers aren't times
 CLOCK_TIME = re.compile(
     r"\b(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap])\.?\s*m\.?",
@@ -893,7 +1009,7 @@ def _hours_from_clock(hour: int, ampm: str) -> list[int]:
     return [hour % 12, hour % 12 + 12]
 
 
-def parse_reminder(text: str) -> tuple[str, datetime]:
+def parse_reminder(text: str) -> tuple[str, datetime, int | None]:
     now = now_local()
     leftover = text
     weekday_match = WEEKDAY_PHRASE.search(leftover)
@@ -917,6 +1033,7 @@ def parse_reminder(text: str) -> tuple[str, datetime]:
 
     when = now + timedelta(hours=1)
     timed = False
+    duration_minutes, leftover, duration_role = family.extract_spoken_duration(leftover)
 
     if AT_NOON.search(leftover):
         when = _soonest_clock(now, [12], 0, day)
@@ -953,15 +1070,8 @@ def parse_reminder(text: str) -> tuple[str, datetime]:
                 leftover = AT_TIME.sub(" ", leftover, count=1)
                 timed = True
 
-    match = IN_DURATION.search(leftover)
-    if match:
-        amount = int(match.group(1) or 1)
-        unit = match.group(2).lower()
-        if unit.startswith("hour") or unit.startswith("hr"):
-            when = now + timedelta(hours=amount)
-        else:
-            when = now + timedelta(minutes=amount)
-        leftover = IN_DURATION.sub(" ", leftover)
+    if duration_minutes is not None and not timed and duration_role != "length":
+        when = now + timedelta(minutes=duration_minutes)
         timed = True
 
     if not timed and TONIGHT.search(leftover):
@@ -991,7 +1101,23 @@ def parse_reminder(text: str) -> tuple[str, datetime]:
             when += timedelta(days=7)
         if not timed:
             when = when.replace(hour=9, minute=0)
-    return title, when
+    return title, when, duration_minutes
+
+
+def duration_spoken(minutes: int | None) -> str:
+    if not minutes or minutes <= 0:
+        return ""
+    hours, mins = divmod(int(minutes), 60)
+    parts = []
+    if hours == 1:
+        parts.append("1 hour")
+    elif hours > 1:
+        parts.append(f"{hours} hours")
+    if mins == 1:
+        parts.append("1 minute")
+    elif mins > 1:
+        parts.append(f"{mins} minutes")
+    return " and ".join(parts)
 
 
 def parse_command(transcript: str) -> tuple[str | None, str]:
@@ -1761,6 +1887,45 @@ def next_event():
     return jsonify({"ok": True, **event})
 
 
+@app.get("/reminder-due")
+def reminder_due():
+    """Upcoming timed reminder for the pin. due=true when it is about 10 minutes away."""
+    if not calendar_ready():
+        return Response(status=204)
+    try:
+        event = fetch_next_timed_event()
+    except Exception as err:
+        print(f"reminder-due failed: {err}")
+        return jsonify({"ok": False, "error": str(err)}), 500
+    if not event:
+        return Response(status=204)
+    return jsonify({"ok": True, "due": bool(event.get("alert")), **event})
+
+
+@app.get("/announce-reminder")
+def announce_reminder():
+    """PCM speech for a reminder that is about 10 minutes away."""
+    if not calendar_ready():
+        return Response(status=204)
+    try:
+        event = fetch_due_reminder()
+    except Exception as err:
+        print(f"announce-reminder failed: {err}")
+        return jsonify({"ok": False, "error": str(err)}), 500
+    if not event:
+        return Response(status=204)
+    spoken = event.get("spoken") or reminder_spoken(
+        event.get("full_title") or event.get("title") or "Reminder",
+        event.get("when") or "",
+    )
+    print(f"announce-reminder: {event.get('when')} {event.get('full_title') or event.get('title')}")
+    resp = spoken_pcm_response(spoken, "remind", "Reminder", 16000)
+    if hasattr(resp, "headers"):
+        resp.headers["X-Event-Id"] = event.get("id") or ""
+        resp.headers["X-Title"] = event.get("title") or ""
+    return resp
+
+
 def _wifi_from_request() -> list[dict]:
     payload = request.get_json(silent=True) if request.is_json else None
     if isinstance(payload, dict):
@@ -1887,11 +2052,18 @@ def note():
                     "Sign in",
                     sample_rate,
                 )
-            title, when = parse_reminder(text)
-            created = create_calendar_event(title, when)
+            title, when, duration_minutes = parse_reminder(text)
+            created = create_calendar_event(title, when, duration_minutes)
             store.add_recording("task", title, when=created["when"])
-            print(f"remind: {created['when']} {title}", flush=True)
-            spoken = f"Okay, reminder set. {title}, {created['when']}."
+            print(
+                f"remind: {created['when']} {title} ({created.get('minutes')} min)",
+                flush=True,
+            )
+            length = duration_spoken(created.get("minutes") if duration_minutes else None)
+            spoken = f"Okay, reminder set. {title}, {created['when']}"
+            if length:
+                spoken += f", {length}"
+            spoken += "."
             return spoken_pcm_response(spoken, "remind", "Reminded", sample_rate)
 
         if action == "ask":
@@ -1904,7 +2076,7 @@ def note():
                 print("timer needs Google Calendar login")
                 return json_action("need_login", status="Sign in")
             title, when, minutes = family.parse_timer(text or "10 minutes")
-            created = create_calendar_event(title, when)
+            created = create_calendar_event(title, when, minutes)
             store.add_recording("timer", title, when=created["when"])
             print(f"timer: {minutes} min → {created['when']} {title}")
             return json_action(
