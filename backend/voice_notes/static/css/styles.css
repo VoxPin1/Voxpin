@@ -1233,6 +1233,52 @@ body.landing .about-copy h1 {
   margin-bottom: 0.25rem;
 }
 
+.stack-path {
+  list-style: none;
+  margin: 2.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+  counter-reset: stack-step;
+}
+
+.stack-path li {
+  position: relative;
+  padding: 1rem 1.15rem 1rem 3.4rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(21, 28, 40, 0.72);
+  counter-increment: stack-step;
+}
+
+.stack-path li::before {
+  content: counter(stack-step);
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  display: grid;
+  place-items: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  border-radius: 50%;
+  background: rgba(62, 201, 176, 0.16);
+  color: var(--signal);
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.stack-path strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.stack-path span {
+  display: block;
+  color: var(--mist);
+  line-height: 1.45;
+}
+
 .feature-list span {
   color: var(--mist);
   line-height: 1.45;
@@ -1596,7 +1642,8 @@ body.landing .about-copy .lede,
 body.landing .about-copy p,
 body.landing .device-intro p,
 body.landing .feature-list span,
-body.landing .team-card p {
+body.landing .team-card p,
+body.landing .stack-path span {
   color: var(--mist);
 }
 
@@ -1606,7 +1653,8 @@ body.landing .about-copy .lede {
 }
 
 body.landing .team-card,
-body.landing .feature-list li {
+body.landing .feature-list li,
+body.landing .stack-path li {
   border: 1px solid rgba(110, 86, 245, 0.16);
   background: #fff;
   box-shadow: 0 16px 40px rgba(90, 69, 232, 0.08);
@@ -1620,7 +1668,8 @@ body.landing .team-mark {
 }
 
 body.landing .team-card strong,
-body.landing .feature-list strong {
+body.landing .feature-list strong,
+body.landing .stack-path strong {
   font-family: "Montserrat", "Trebuchet MS", sans-serif;
   color: var(--ink);
 }
@@ -1630,6 +1679,12 @@ body.landing .team-role {
   color: var(--purple) !important;
   font-weight: 800;
   font-size: 0.82rem;
+}
+
+body.landing .stack-path li::before {
+  background: var(--purple);
+  color: #fff;
+  font-family: "Montserrat", "Trebuchet MS", sans-serif;
 }
 
 body.landing .device-band .feature-list {
