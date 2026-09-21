@@ -1470,8 +1470,9 @@ body.landing .slogan {
   color: var(--purple);
   font-family: "Caveat", "Segoe Script", cursive;
   font-weight: 700;
-  font-size: clamp(1.8rem, 4vw, 2.5rem);
+  font-size: clamp(2.15rem, 5vw, 3.1rem);
   letter-spacing: 0.01em;
+  line-height: 1.1;
 }
 
 body.landing .hero-copy h1 {
@@ -1484,6 +1485,29 @@ body.landing .hero-copy h1 {
   letter-spacing: 0;
   line-height: 1.4;
   animation: none;
+}
+
+body.landing .poster-pills {
+  list-style: none;
+  display: grid;
+  justify-items: start;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 1.25rem 0 0;
+  padding: 0;
+}
+
+body.landing .poster-pills li {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.42rem 1.15rem 0.5rem;
+  border-radius: 999px;
+  background: #16141f;
+  color: #fff;
+  font-family: "Caveat", "Segoe Script", cursive;
+  font-weight: 700;
+  font-size: clamp(1.15rem, 2.2vw, 1.4rem);
+  line-height: 1.15;
 }
 
 body.landing .icon-features {
@@ -1660,8 +1684,10 @@ body.landing .logo-disc img {
 body.landing .tagline {
   margin: 0.85rem 0 0;
   color: #fff !important;
-  font-size: 1.2rem;
-  font-weight: 800;
+  font-family: "Caveat", "Segoe Script", cursive;
+  font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+  font-weight: 700;
+  line-height: 1.1;
 }
 
 body.landing .btn.primary {
