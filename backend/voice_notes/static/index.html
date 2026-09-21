@@ -89,18 +89,14 @@
             </li>
           </ul>
         </div>
-        <div class="device-shot" aria-hidden="true">
-          <div class="cube">
-            <div class="cube-mics"><span></span><span></span></div>
-            <div class="cube-bezel">
-              <div class="lcd">
-                <div class="lcd-bat"><i id="lcdBat"></i></div>
-                <p class="lcd-time" id="lcdTime">3:31</p>
-                <p class="lcd-date" id="lcdDate">Sat Sep 13</p>
-                <p class="lcd-note">Violin practice at 4</p>
-              </div>
-            </div>
-          </div>
+        <div class="device-shot">
+          <img
+            class="product-photo"
+            src="/static/img/voxpin.png"
+            alt="VoxPin, a small white cube with a screen showing the time and the next reminder"
+            width="707"
+            height="817"
+          />
         </div>
       </section>
 
@@ -133,9 +129,9 @@
             <strong>Rian</strong>
             <p class="team-role">8th grade</p>
             <p>
-              Rian is happiest on a basketball court or on the ski slope. Give
-              him a problem and he stays, the way he did at business fairs. He
-              will hit a volleyball anytime, and he plays violin.
+              Buckets on the court, carving down the slopes, and shredding the
+              violin. Between spikes and startups, he's already run business
+              fairs. What's next?
             </p>
           </li>
           <li class="team-card">
@@ -143,9 +139,8 @@
             <strong>Anay</strong>
             <p class="team-role">6th grade</p>
             <p>
-              Anay is happiest on a long bike ride or in a soccer game. Give
-              him a problem and he stays, the way he does at a lemonade stand.
-              Karate is how he keeps pushing himself each day.
+              Miles on his bike, goals on the pitch, and chops in karate. He
+              never quits, and he's the go-to lemonade boss of the neighborhood.
             </p>
           </li>
           <li class="team-card">
@@ -153,9 +148,8 @@
             <strong>Nihar</strong>
             <p class="team-role">7th grade</p>
             <p>
-              Nihar is happiest on a soccer field or playing tabla. Give him a
-              problem and he stays, the way he does with a math puzzle. He will
-              not leave until it is done.
+              Fast feet on the soccer field, fast hands on the tabla. Hand him
+              a tough math puzzle and he won't leave until it's cracked.
             </p>
           </li>
         </ul>
@@ -305,24 +299,5 @@
       <span>Think it. Jot it. Do it.</span>
     </footer>
 
-    <script>
-      (() => {
-        const timeEl = document.getElementById("lcdTime");
-        const dateEl = document.getElementById("lcdDate");
-        if (!timeEl || !dateEl) return;
-        function tick() {
-          const now = new Date();
-          timeEl.textContent = now.toLocaleTimeString(undefined, {
-            hour: "numeric",
-            minute: "2-digit",
-          });
-          const weekday = now.toLocaleDateString(undefined, { weekday: "short" });
-          const month = now.toLocaleDateString(undefined, { month: "short" });
-          dateEl.textContent = `${weekday} ${month} ${now.getDate()}`;
-        }
-        tick();
-        setInterval(tick, 1000);
-      })();
-    </script>
   </body>
 </html>
