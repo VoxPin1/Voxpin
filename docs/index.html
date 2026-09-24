@@ -41,6 +41,31 @@
     </header>
 
     <main>
+      <section class="video-banner" id="watch" aria-label="VoxPin video">
+        <video
+          class="banner-video"
+          id="bannerVideo"
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="auto"
+          poster="media/voxpin-ad-poster.jpg"
+        >
+          <source src="media/voxpin-ad.mp4" type="video/mp4" />
+        </video>
+        <div class="banner-bar">
+          <div class="banner-copy">
+            <strong>Want a VoxPin?</strong>
+            <span>Join the pre-order interest list for the pin or the starter kit.</span>
+          </div>
+          <div class="banner-actions">
+            <a class="btn primary" href="preorder.html">Join the pre-order list</a>
+            <button class="btn ghost sound-btn" type="button" id="soundBtn" aria-pressed="false">Sound on</button>
+          </div>
+        </div>
+      </section>
+
       <section class="hero card-hero" id="top">
         <div class="hero-copy">
           <p class="brand-row">
@@ -195,17 +220,6 @@
         </ul>
       </section>
 
-      <section class="ad-band" id="watch">
-        <div class="ad-copy">
-          <p class="eyebrow">Watch</p>
-          <h2>See VoxPin in 49 seconds</h2>
-          <p>Notes, reminders, translation, SOS, and the starter kit you can code yourself.</p>
-        </div>
-        <video class="ad-video" controls playsinline preload="metadata" poster="media/voxpin-ad-poster.jpg">
-          <source src="media/voxpin-ad.mp4" type="video/mp4" />
-        </video>
-      </section>
-
       <section class="about-band" id="how">
         <div class="about-copy">
           <p class="eyebrow">Tech stack</p>
@@ -318,5 +332,23 @@
       <span>Think it. Jot it. Do it.</span>
     </footer>
 
+    <script>
+      (() => {
+        const video = document.getElementById("bannerVideo");
+        const soundBtn = document.getElementById("soundBtn");
+        if (!video || !soundBtn) return;
+        if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+          video.removeAttribute("autoplay");
+          video.pause();
+          video.controls = true;
+        }
+        soundBtn.addEventListener("click", () => {
+          video.muted = !video.muted;
+          if (!video.muted) video.play();
+          soundBtn.textContent = video.muted ? "Sound on" : "Sound off";
+          soundBtn.setAttribute("aria-pressed", String(!video.muted));
+        });
+      })();
+    </script>
   </body>
 </html>
