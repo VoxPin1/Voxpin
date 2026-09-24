@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>VoxPin Pre-order List</title>
+    <meta
+      name="description"
+      content="Want a VoxPin? Join the pre-order interest list and we will tell you first when it is ready."
+    />
+    <link rel="icon" href="img/favicon.png?v=3" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Montserrat:wght@700;800&family=Nunito:wght@500;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <base href="/Voxpin/" />
+    <link rel="stylesheet" href="css/styles.css" />
+    <style>
+      [hidden] {
+        display: none !important;
+      }
+
+      body.landing .preorder {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+        gap: clamp(1.5rem, 5vw, 4rem);
+        align-items: start;
+        max-width: 1080px;
+        margin: 0 auto;
+        padding: clamp(2rem, 6vw, 4.5rem) 1.25rem 4rem;
+      }
+
+      body.landing .preorder h1 {
+        margin: 0;
+        font-family: "Montserrat", "Trebuchet MS", sans-serif;
+        font-size: clamp(2.2rem, 6vw, 3.6rem);
+        font-weight: 800;
+        line-height: 1.02;
+        letter-spacing: -0.04em;
+        text-wrap: balance;
+      }
+
+      body.landing .preorder .slogan {
+        margin: 0.8rem 0 0;
+        color: var(--purple);
+        font-family: "Caveat", cursive;
+        font-size: 2rem;
+        font-weight: 700;
+      }
+
+      body.landing .preorder-copy p {
+        max-width: 34rem;
+        color: var(--mist);
+        font-size: 1.05rem;
+        line-height: 1.6;
+      }
+
+      body.landing .perks {
+        display: grid;
+        gap: 0.7rem;
+        margin: 1.5rem 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      body.landing .perks li {
+        display: flex;
+        gap: 0.7rem;
+        align-items: baseline;
+        font-weight: 800;
+      }
+
+      body.landing .perks li::before {
+        content: "";
+        flex: none;
+        width: 0.6rem;
+        height: 0.6rem;
+        border-radius: 50%;
+        background: var(--gold);
+        transform: translateY(-0.05rem);
+      }
+
+      body.landing .form-card {
+        padding: clamp(1.25rem, 4vw, 2.2rem);
+        border-radius: 28px;
+        background: #fff;
+        box-shadow: 0 24px 60px rgba(90, 69, 232, 0.16);
+      }
+
+      body.landing .form-card form {
+        display: grid;
+        gap: 1.15rem;
+      }
+
+      body.landing .field {
+        display: grid;
+        gap: 0.4rem;
+      }
+
+      body.landing .field > label,
+      body.landing .field > legend {
+        padding: 0;
+        font-weight: 800;
+        font-size: 0.98rem;
+      }
+
+      body.landing .field .hint {
+        font-weight: 600;
+        color: var(--mist);
+        font-size: 0.88rem;
+      }
+
+      body.landing fieldset.field {
+        margin: 0;
+        padding: 0;
+        border: 0;
+      }
+
+      body.landing .form-card input[type="text"],
+      body.landing .form-card input[type="email"],
+      body.landing .form-card textarea {
+        width: 100%;
+        padding: 0.8rem 0.95rem;
+        border: 2px solid #e4dfff;
+        border-radius: 14px;
+        background: #fbfaff;
+        color: var(--ink);
+        font: 700 1rem "Nunito", "Trebuchet MS", sans-serif;
+      }
+
+      body.landing .form-card textarea {
+        min-height: 5.5rem;
+        resize: vertical;
+      }
+
+      body.landing .form-card input:focus-visible,
+      body.landing .form-card textarea:focus-visible {
+        outline: none;
+        border-color: var(--purple);
+        background: #fff;
+      }
+
+      body.landing .choices {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 0.4rem;
+      }
+
+      body.landing .choices input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      body.landing .choices label {
+        padding: 0.55rem 1rem;
+        border: 2px solid #e4dfff;
+        border-radius: 999px;
+        background: #fbfaff;
+        font-weight: 800;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+      }
+
+      body.landing .choices input:checked + label {
+        background: var(--purple);
+        border-color: var(--purple);
+        color: #fff;
+      }
+
+      body.landing .choices input:focus-visible + label {
+        outline: 3px solid var(--gold);
+        outline-offset: 2px;
+      }
+
+      body.landing .consent {
+        display: flex;
+        gap: 0.65rem;
+        align-items: flex-start;
+        font-weight: 700;
+        font-size: 0.92rem;
+        color: var(--mist);
+        line-height: 1.45;
+      }
+
+      body.landing .consent input {
+        flex: none;
+        width: 1.2rem;
+        height: 1.2rem;
+        margin-top: 0.1rem;
+        accent-color: var(--purple);
+      }
+
+      body.landing .submit {
+        justify-self: start;
+        padding: 0.95rem 1.8rem;
+        border: 0;
+        border-radius: 999px;
+        background: var(--purple);
+        color: #fff;
+        font: 800 1.05rem "Montserrat", "Trebuchet MS", sans-serif;
+        cursor: pointer;
+        transition: background 0.2s, transform 0.2s;
+      }
+
+      body.landing .submit:hover {
+        background: var(--purple-deep);
+        transform: translateY(-1px);
+      }
+
+      body.landing .submit:focus-visible {
+        outline: 3px solid var(--gold);
+        outline-offset: 3px;
+      }
+
+      body.landing .submit[disabled] {
+        opacity: 0.6;
+        cursor: wait;
+        transform: none;
+      }
+
+      body.landing .form-note {
+        margin: 0;
+        color: var(--mist);
+        font-size: 0.85rem;
+        line-height: 1.5;
+      }
+
+      body.landing .form-error {
+        margin: 0;
+        padding: 0.75rem 1rem;
+        border-radius: 12px;
+        background: #fff0f0;
+        color: #b4232a;
+        font-weight: 800;
+      }
+
+      body.landing .thanks {
+        text-align: center;
+        padding: 1.5rem 0.5rem;
+      }
+
+      body.landing .thanks img {
+        width: 4rem;
+      }
+
+      body.landing .thanks h2 {
+        margin: 1rem 0 0.4rem;
+        font-family: "Montserrat", "Trebuchet MS", sans-serif;
+        font-size: 1.8rem;
+        letter-spacing: -0.03em;
+      }
+
+      body.landing .thanks p {
+        margin: 0.4rem auto 0;
+        max-width: 26rem;
+        color: var(--mist);
+        line-height: 1.55;
+      }
+
+      body.landing .thanks .slogan {
+        color: var(--purple);
+        font-family: "Caveat", cursive;
+        font-size: 1.8rem;
+        font-weight: 700;
+      }
+
+      @media (max-width: 820px) {
+        body.landing .preorder {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        body.landing .submit,
+        body.landing .choices label {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body class="landing">
+    <div class="atmosphere" aria-hidden="true">
+      <div class="orb orb-a"></div>
+      <div class="orb orb-b"></div>
+    </div>
+
+    <header class="topbar landing-topbar">
+      <a class="mark" href="./" aria-label="VoxPin home">
+        <img class="mark-logo" src="img/logo.png?v=3" alt="" />
+        VoxPin
+      </a>
+      <nav class="site-nav" aria-label="Page sections">
+        <a href="./#about">About us</a>
+        <a href="./#device">Device</a>
+        <a href="./#how">How it works</a>
+        <a href="preorder.html" aria-current="page">Pre-order</a>
+      </nav>
+    </header>
+
+    <main class="preorder">
+      <section class="preorder-copy">
+        <p class="eyebrow">Pre-order interest list</p>
+        <h1>Want your own VoxPin?</h1>
+        <p class="slogan">Think it. Jot it. Do it.</p>
+        <p>
+          We are three friends building VoxPin, a small pin with no apps and no
+          feed. You hold it and talk. It saves notes, sets reminders,
+          translates, and can SOS your parents.
+        </p>
+        <p>
+          We are not selling it yet. Tell us you want one and we will let you
+          know first when pre-orders open. Signing up is free and you do not
+          have to buy anything.
+        </p>
+        <p>
+          Like to build things? The starter kit has all the parts but no code,
+          so you can code it yourself. You can also pick the colors and style of
+          the outside.
+        </p>
+        <ul class="perks">
+          <li>First to hear when pre-orders open</li>
+          <li>Help us pick which feature to make better next</li>
+          <li>No spam. We will only write about VoxPin.</li>
+        </ul>
+      </section>
+
+      <section class="form-card" aria-live="polite">
+        <form id="interestForm" novalidate>
+          <div class="field">
+            <label for="name">Your name</label>
+            <input id="name" name="name" type="text" autocomplete="name" required />
+          </div>
+
+          <div class="field">
+            <label for="email">Email <span class="hint">(a parent's email is great too)</span></label>
+            <input id="email" name="email" type="email" autocomplete="email" required />
+          </div>
+
+          <fieldset class="field">
+            <legend>Which one do you want?</legend>
+            <div class="choices">
+              <input type="radio" id="verPin" name="version" value="Ready-made pin" checked />
+              <label for="verPin">Ready-made pin</label>
+              <input type="radio" id="verKit" name="version" value="Starter kit (no code)" />
+              <label for="verKit">Starter kit, I'll code it</label>
+              <input type="radio" id="verUnsure" name="version" value="Not sure yet" />
+              <label for="verUnsure">Not sure yet</label>
+            </div>
+          </fieldset>
+
+          <fieldset class="field">
+            <legend>How many would you want?</legend>
+            <div class="choices">
+              <input type="radio" id="count1" name="count" value="1" checked />
+              <label for="count1">1</label>
+              <input type="radio" id="count2" name="count" value="2" />
+              <label for="count2">2</label>
+              <input type="radio" id="count3" name="count" value="3 or more" />
+              <label for="count3">3 or more</label>
+            </div>
+          </fieldset>
+
+          <fieldset class="field">
+            <legend>Which features do you like most? <span class="hint">Pick any</span></legend>
+            <div class="choices">
+              <input type="checkbox" id="fNotes" name="feature" value="Notes" />
+              <label for="fNotes">Notes</label>
+              <input type="checkbox" id="fRem" name="feature" value="Reminders" />
+              <label for="fRem">Reminders</label>
+              <input type="checkbox" id="fTr" name="feature" value="Translate" />
+              <label for="fTr">Translate</label>
+              <input type="checkbox" id="fSos" name="feature" value="SOS" />
+              <label for="fSos">SOS</label>
+            </div>
+          </fieldset>
+
+          <div class="field">
+            <label for="notes">Anything else? <span class="hint">Optional</span></label>
+            <textarea id="notes" name="notes" placeholder="A color or style for the outside, a price you would pay, or a question for us"></textarea>
+          </div>
+
+          <label class="consent" for="consent">
+            <input type="checkbox" id="consent" name="consent" required />
+            <span>I am 13 or older, or a parent or guardian is helping me fill this in.</span>
+          </label>
+
+          <p class="form-error" id="formError" hidden></p>
+
+          <button class="submit" type="submit" id="submitBtn">Add me to the list</button>
+          <p class="form-note">
+            We only use your email to tell you about VoxPin pre-orders. Want to
+            be taken off the list? Ask us on Discord or at our booth.
+          </p>
+        </form>
+
+        <div class="thanks" id="thanks" hidden>
+          <img src="img/logo.png?v=3" alt="" />
+          <h2>You are on the list!</h2>
+          <p>Thanks for your interest. We will email you when VoxPin pre-orders open.</p>
+          <p class="slogan">Think it. Jot it. Do it.</p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-foot">
+      <span>VoxPin</span>
+      <a href="https://github.com/VoxPin1/Voxpin" target="_blank" rel="noopener">GitHub</a>
+      <span>Think it. Jot it. Do it.</span>
+    </footer>
+
+    <script>
+      // Answers go to a Google Form that we own, and Google puts them in a Sheet.
+      // Setup: make a Google Form with 6 "Short answer" questions (Name, Email,
+      // Pin or kit, How many, Features, Anything else). Click the three dots, then
+      // "Get pre-filled link". Type NAME, EMAIL, VERSION, COUNT, FEATURES, NOTES in
+      // the six boxes, click "Get link", copy it, and paste it between the quotes.
+      const GOOGLE_FORM_PREFILLED_LINK = "";
+
+      (() => {
+        const form = document.getElementById("interestForm");
+        const errorEl = document.getElementById("formError");
+        const button = document.getElementById("submitBtn");
+        const thanks = document.getElementById("thanks");
+
+        function readFormConfig(link) {
+          if (!link) return null;
+          try {
+            const url = new URL(link);
+            const entries = {};
+            for (const [key, value] of url.searchParams) {
+              if (key.startsWith("entry.")) entries[value.trim().toUpperCase()] = key;
+            }
+            const action = url.origin + url.pathname.replace(/\/viewform$/, "/formResponse");
+            return { action, entries };
+          } catch {
+            return null;
+          }
+        }
+
+        const config = readFormConfig(GOOGLE_FORM_PREFILLED_LINK);
+
+        function showError(message) {
+          errorEl.textContent = message;
+          errorEl.hidden = false;
+        }
+
+        form.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          errorEl.hidden = true;
+
+          const name = form.name.value.trim();
+          const email = form.email.value.trim();
+          if (!name) return showError("Please type your name.");
+          if (!form.email.checkValidity() || !email) return showError("Please type an email we can write to, like name@example.com.");
+          if (!form.consent.checked) return showError("Please check the box so we know it is OK to email you.");
+          if (!config) return showError("The list is not connected yet. Please tell us at the booth and we will add you.");
+
+          const answers = {
+            NAME: name,
+            EMAIL: email,
+            VERSION: form.querySelector('input[name="version"]:checked').value,
+            COUNT: form.querySelector('input[name="count"]:checked').value,
+            FEATURES: [...form.querySelectorAll('input[name="feature"]:checked')].map((box) => box.value).join(", "),
+            NOTES: form.notes.value.trim(),
+          };
+          const body = new URLSearchParams();
+          for (const [label, value] of Object.entries(answers)) {
+            if (config.entries[label]) body.append(config.entries[label], value);
+          }
+
+          button.disabled = true;
+          button.textContent = "Adding you...";
+          try {
+            // Google Forms does not send back a readable reply, so a finished request counts as saved.
+            await fetch(config.action, { method: "POST", mode: "no-cors", body });
+            form.hidden = true;
+            thanks.hidden = false;
+          } catch {
+            showError("That did not go through. Check your internet and try again.");
+          } finally {
+            button.disabled = false;
+            button.textContent = "Add me to the list";
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>
