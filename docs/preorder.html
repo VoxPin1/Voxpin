@@ -413,35 +413,16 @@
     </footer>
 
     <script>
-      // Answers go to a Google Form that we own, and Google puts them in a Sheet.
-      // Setup: make a Google Form with 6 "Short answer" questions (Name, Email,
-      // Pin or kit, How many, Features, Anything else). Click the three dots, then
-      // "Get pre-filled link". Type NAME, EMAIL, VERSION, COUNT, FEATURES, NOTES in
-      // the six boxes, click "Get link", copy it, and paste it between the quotes.
-      const GOOGLE_FORM_PREFILLED_LINK = "";
+      // Each signup is posted to the same Apps Script webhook the pin uses.
+      // kind=preorder writes a row in the pre-order spreadsheet, not the notes Doc.
+      const SHEET_WEBHOOK_URL =
+        "https://script.google.com/macros/s/AKfycbxyb-EqIo3Zn-0Ck_c4QcQwl2Lctsy0ylVdeLYUpXkho7yKDP1X7iijhlH7xK_WpURU/exec";
 
       (() => {
         const form = document.getElementById("interestForm");
         const errorEl = document.getElementById("formError");
         const button = document.getElementById("submitBtn");
         const thanks = document.getElementById("thanks");
-
-        function readFormConfig(link) {
-          if (!link) return null;
-          try {
-            const url = new URL(link);
-            const entries = {};
-            for (const [key, value] of url.searchParams) {
-              if (key.startsWith("entry.")) entries[value.trim().toUpperCase()] = key;
-            }
-            const action = url.origin + url.pathname.replace(/\/viewform$/, "/formResponse");
-            return { action, entries };
-          } catch {
-            return null;
-          }
-        }
-
-        const config = readFormConfig(GOOGLE_FORM_PREFILLED_LINK);
 
         function showError(message) {
           errorEl.textContent = message;
@@ -455,28 +436,35 @@
           const name = form.name.value.trim();
           const email = form.email.value.trim();
           if (!name) return showError("Please type your name.");
-          if (!form.email.checkValidity() || !email) return showError("Please type an email we can write to, like name@example.com.");
-          if (!form.consent.checked) return showError("Please check the box so we know it is OK to email you.");
-          if (!config) return showError("The list is not connected yet. Please tell us at the booth and we will add you.");
-
-          const answers = {
-            NAME: name,
-            EMAIL: email,
-            VERSION: form.querySelector('input[name="version"]:checked').value,
-            COUNT: form.querySelector('input[name="count"]:checked').value,
-            FEATURES: [...form.querySelectorAll('input[name="feature"]:checked')].map((box) => box.value).join(", "),
-            NOTES: form.notes.value.trim(),
-          };
-          const body = new URLSearchParams();
-          for (const [label, value] of Object.entries(answers)) {
-            if (config.entries[label]) body.append(config.entries[label], value);
+          if (!form.email.checkValidity() || !email) {
+            return showError("Please type an email we can write to, like name@example.com.");
           }
+          if (!form.consent.checked) {
+            return showError("Please check the box so we know it is OK to email you.");
+          }
+
+          const payload = JSON.stringify({
+            kind: "preorder",
+            name,
+            email,
+            version: form.querySelector('input[name="version"]:checked').value,
+            count: form.querySelector('input[name="count"]:checked').value,
+            features: [...form.querySelectorAll('input[name="feature"]:checked')]
+              .map((box) => box.value)
+              .join(", "),
+            notes: form.notes.value.trim(),
+          });
 
           button.disabled = true;
           button.textContent = "Adding you...";
           try {
-            // Google Forms does not send back a readable reply, so a finished request counts as saved.
-            await fetch(config.action, { method: "POST", mode: "no-cors", body });
+            // text/plain avoids a CORS preflight. Apps Script still reads the JSON.
+            await fetch(SHEET_WEBHOOK_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "text/plain;charset=utf-8" },
+              body: payload,
+            });
             form.hidden = true;
             thanks.hidden = false;
           } catch {
