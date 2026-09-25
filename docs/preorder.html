@@ -455,23 +455,22 @@
             notes: form.notes.value.trim(),
           });
 
+          // Google's web app is slow (POST, then a redirect). The row is written
+          // on the first POST, so do not make people wait for the rest.
           button.disabled = true;
-          button.textContent = "Adding you...";
           try {
-            // text/plain avoids a CORS preflight. Apps Script still reads the JSON.
-            await fetch(SHEET_WEBHOOK_URL, {
+            fetch(SHEET_WEBHOOK_URL, {
               method: "POST",
               mode: "no-cors",
+              keepalive: true,
               headers: { "Content-Type": "text/plain;charset=utf-8" },
               body: payload,
-            });
+            }).catch(() => {});
             form.hidden = true;
             thanks.hidden = false;
           } catch {
-            showError("That did not go through. Check your internet and try again.");
-          } finally {
             button.disabled = false;
-            button.textContent = "Add me to the list";
+            showError("That did not go through. Check your internet and try again.");
           }
         });
       })();
