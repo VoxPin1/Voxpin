@@ -750,6 +750,19 @@ def pcm_to_wav(pcm: bytes, sample_rate: int, channels: int, sample_width: int) -
     return buf.getvalue()
 
 
+# Words Google often mishears → what we actually said. Find new ones with:
+#   tail -f helper.log | grep heard
+CORRECTIONS = {
+    r"\b[bvf]ox\s*(?:been|bin|pin|pen)\b": "VoxPin",  # heard "box been 2.0"
+}
+
+
+def fix_words(text: str) -> str:
+    for wrong, right in CORRECTIONS.items():
+        text = re.sub(wrong, right, text, flags=re.IGNORECASE)
+    return text
+
+
 def transcribe(wav_bytes: bytes, language: str = "en") -> str:
     """Speech-to-text via Google's web endpoint using LINEAR16 (no flac binary)."""
     import json
@@ -818,7 +831,7 @@ def transcribe(wav_bytes: bytes, language: str = "en") -> str:
             continue
         transcript = (alternatives[0].get("transcript") or "").strip()
         if transcript:
-            return transcript
+            return fix_words(transcript)
     return ""
 
 
