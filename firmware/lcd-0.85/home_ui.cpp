@@ -25,7 +25,7 @@ static Arduino_DataBus *bus = new Arduino_ESP32SPI(
 static Arduino_GFX *gfx = new Arduino_GC9107(bus, LCD_RST_PIN, 0, true);
 
 static SemaphoreHandle_t lvgl_mux = NULL;
-static lv_obj_t *battery_arc = NULL;
+static lv_obj_t *battery_bar = NULL;
 static lv_obj_t *battery_label = NULL;
 static lv_obj_t *time_label = NULL;
 static lv_obj_t *date_label = NULL;
@@ -169,9 +169,9 @@ static void update_home_labels(void)
       hour12 = 12;
     }
     const char *ampm = (timeinfo.tm_hour >= 12) ? "PM" : "AM";
-    snprintf(time_text, sizeof(time_text), "%d:%02d", hour12, timeinfo.tm_min);
-    snprintf(date_text, sizeof(date_text), "%s %s %d %s",
-             days[timeinfo.tm_wday], months[timeinfo.tm_mon], timeinfo.tm_mday, ampm);
+    snprintf(time_text, sizeof(time_text), "%d:%02d%s", hour12, timeinfo.tm_min, ampm);
+    snprintf(date_text, sizeof(date_text), "%s %s %d",
+             days[timeinfo.tm_wday], months[timeinfo.tm_mon], timeinfo.tm_mday);
   } else {
     snprintf(time_text, sizeof(time_text), "--:--");
     date_text[0] = '\0';
@@ -183,8 +183,8 @@ static void update_home_labels(void)
     snprintf(bat_text, sizeof(bat_text), "%d%%", pct);
   }
 
-  if (lv_arc_get_value(battery_arc) != pct) {
-    lv_arc_set_value(battery_arc, pct);
+  if (lv_bar_get_value(battery_bar) != pct) {
+    lv_bar_set_value(battery_bar, pct, LV_ANIM_OFF);
   }
   set_label_if_changed(battery_label, bat_text);
   set_label_if_changed(time_label, time_text);
@@ -300,37 +300,41 @@ void home_ui_begin(void)
   lv_obj_t *scr = lv_scr_act();
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+  lv_obj_clear_flag(scr, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollbar_mode(scr, LV_SCROLLBAR_MODE_OFF);
 
-  // Battery arc - large green circle around the screen
-  battery_arc = lv_arc_create(scr);
-  lv_obj_set_size(battery_arc, 120, 120);
-  lv_obj_align(battery_arc, LV_ALIGN_CENTER, 0, 0);
-  lv_arc_set_rotation(battery_arc, 270);
-  lv_arc_set_bg_angles(battery_arc, 0, 360);
-  lv_arc_set_range(battery_arc, 0, 100);
-  lv_obj_remove_style(battery_arc, NULL, LV_PART_KNOB);
-  lv_obj_clear_flag(battery_arc, LV_OBJ_FLAG_CLICKABLE);
-  // Background track (dark gray)
-  lv_obj_set_style_arc_color(battery_arc, lv_color_hex(0x222222), LV_PART_MAIN);
-  lv_obj_set_style_arc_width(battery_arc, 8, LV_PART_MAIN);
-  // Indicator (green)
-  lv_obj_set_style_arc_color(battery_arc, lv_color_hex(0x4CD964), LV_PART_INDICATOR);
-  lv_obj_set_style_arc_width(battery_arc, 8, LV_PART_INDICATOR);
-
+  // Percent sits to the right of the bar so both fit on one row.
   battery_label = lv_label_create(scr);
   lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_12, 0);
   lv_obj_set_style_text_color(battery_label, lv_color_hex(0x4CD964), 0);
-  lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 12);
+  lv_obj_set_style_text_align(battery_label, LV_TEXT_ALIGN_RIGHT, 0);
+  lv_obj_set_style_pad_all(battery_label, 0, 0);
+  lv_obj_set_width(battery_label, 48);
+  lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -2, 1);
   lv_label_set_text(battery_label, "--%");
+  lv_obj_clear_flag(battery_label, LV_OBJ_FLAG_SCROLLABLE);
+
+  battery_bar = lv_bar_create(scr);
+  lv_obj_set_size(battery_bar, 70, 6);
+  lv_obj_align_to(battery_bar, battery_label, LV_ALIGN_OUT_LEFT_MID, -4, 0);
+  lv_bar_set_range(battery_bar, 0, 100);
+  lv_bar_set_value(battery_bar, 0, LV_ANIM_OFF);
+  lv_obj_clear_flag(battery_bar, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_style_bg_opa(battery_bar, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(battery_bar, lv_color_hex(0x222222), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(battery_bar, lv_color_hex(0x4CD964), LV_PART_INDICATOR);
+  lv_obj_set_style_radius(battery_bar, 3, LV_PART_MAIN);
+  lv_obj_set_style_radius(battery_bar, 3, LV_PART_INDICATOR);
 
   time_label = lv_label_create(scr);
-  lv_obj_set_style_text_font(time_label, &lv_font_montserrat_28, 0);
+  lv_obj_set_style_text_font(time_label, &lv_font_montserrat_20, 0);
   lv_obj_set_style_text_color(time_label, lv_color_white(), 0);
   lv_obj_set_style_text_align(time_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_pad_all(time_label, 0, 0);
   lv_obj_set_style_pad_bottom(time_label, 0, 0);
   lv_obj_set_width(time_label, LCD_WIDTH);
-  lv_obj_align(time_label, LV_ALIGN_CENTER, 0, -20);
+  lv_obj_align(time_label, LV_ALIGN_CENTER, 0, -18);
+  lv_obj_clear_flag(time_label, LV_OBJ_FLAG_SCROLLABLE);
 
   date_label = lv_label_create(scr);
   lv_obj_set_style_text_font(date_label, &lv_font_montserrat_12, 0);
@@ -339,17 +343,20 @@ void home_ui_begin(void)
   lv_obj_set_style_pad_all(date_label, 0, 0);
   lv_obj_set_width(date_label, LCD_WIDTH);
   lv_obj_align_to(date_label, time_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);
+  lv_obj_clear_flag(date_label, LV_OBJ_FLAG_SCROLLABLE);
 
   event_label = lv_label_create(scr);
   lv_obj_set_style_text_font(event_label, &lv_font_montserrat_12, 0);
-  lv_obj_set_style_text_color(event_label, lv_color_hex(0x8B008B), 0);
+  lv_obj_set_style_text_color(event_label, lv_color_white(), 0);
   lv_obj_set_style_text_align(event_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_pad_all(event_label, 0, 0);
   lv_obj_set_style_text_line_space(event_label, 0, 0);
   lv_label_set_long_mode(event_label, LV_LABEL_LONG_WRAP);
   lv_obj_set_width(event_label, LCD_WIDTH - 8);
-  lv_obj_set_height(event_label, 50);
-  lv_obj_align_to(event_label, date_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 2);
+  lv_obj_set_height(event_label, 32);
+  lv_obj_align_to(event_label, date_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+  lv_obj_clear_flag(event_label, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scrollbar_mode(event_label, LV_SCROLLBAR_MODE_OFF);
   lv_label_set_text(event_label, "Calendar...");
 
   status_label = lv_label_create(scr);
@@ -358,6 +365,7 @@ void home_ui_begin(void)
   lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_width(status_label, LCD_WIDTH);
   lv_obj_align(status_label, LV_ALIGN_BOTTOM_MID, 0, -4);
+  lv_obj_clear_flag(status_label, LV_OBJ_FLAG_SCROLLABLE);
   lv_label_set_text(status_label, "");
 
   update_home_labels();

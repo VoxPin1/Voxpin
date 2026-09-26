@@ -75,9 +75,10 @@ from pathlib import Path
 import sys
 path = Path(sys.argv[1])
 text = path.read_text()
+text = text.replace("#define LV_FONT_MONTSERRAT_20 0", "#define LV_FONT_MONTSERRAT_20 1")
 text = text.replace("#define LV_FONT_MONTSERRAT_28 0", "#define LV_FONT_MONTSERRAT_28 1")
 path.write_text(text)
-print("lv_conf.h: montserrat 28 enabled")
+print("lv_conf.h: montserrat 20 enabled")
 PY
 }
 
