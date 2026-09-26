@@ -55,11 +55,12 @@ static void enter_sleep(void)
   home_ui_set_status("");
   home_ui_set_paused(true);
   home_ui_set_backlight(56);
-  wifi_radio_off();
+  // Wi-Fi stays up in sleep: the iPhone hotspot drops a pin that goes quiet,
+  // and rejoining after wake loses the first voice note.
   ble_companion_sleep();
   audio_pa_enable(false);
   setCpuFrequencyMhz(80);
-  Serial.println("Idle: home stays on, radios off");
+  Serial.println("Idle: home stays on, Wi-Fi stays on");
 }
 
 static void leave_sleep(void)
@@ -142,16 +143,11 @@ static void idle_task(void *arg)
       if (boot_pressed() || plus_pressed()) {
         idle_touch();
       }
+      // Reconnects while awake are handled by wifi_maintain() in loop().
       if ((millis() - last_activity_ms) >= kIdleMs) {
         if (xSemaphoreTake(idle_mux, pdMS_TO_TICKS(50)) == pdTRUE) {
           enter_sleep();
           xSemaphoreGive(idle_mux);
-        }
-      } else if (!wifi_is_connected()) {
-        static uint32_t last_retry_ms = 0;
-        if (millis() - last_retry_ms > 2000) {
-          last_retry_ms = millis();
-          wifi_wake_start();
         }
       }
     }

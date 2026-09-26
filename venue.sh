@@ -21,7 +21,9 @@ def grab(key):
     m = re.search(rf'#define\s+{re.escape(key)}\s+"((?:\\.|[^"\\])*)"', text)
     if not m:
         raise SystemExit(f"missing {key} in wifi_secrets.h")
-    return m.group(1)
+    # wifi_secrets.h stores the apostrophe as C hex bytes (\xe2\x80\x99).
+    raw = m.group(1).encode("utf-8").decode("unicode_escape")
+    return raw.encode("latin1").decode("utf-8")
 
 print(f"SSID={shlex.quote(grab('WIFI_SSID_2'))}")
 print(f"PASSWORD={shlex.quote(grab('WIFI_PASSWORD_2'))}")
@@ -95,7 +97,10 @@ else
       break
     fi
     IP_TRY="$(ipconfig getifaddr "$DEV" 2>/dev/null || true)"
-    if [[ $joined -eq 1 || -n "$IP_TRY" ]]; then
+    case "$IP_TRY" in
+      172.20.10.*|192.0.0.*) joined=1 ;;
+    esac
+    if [[ $joined -eq 1 ]]; then
       break
     fi
     sleep 3

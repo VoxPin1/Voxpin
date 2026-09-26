@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VoxPin — How it works</title>
+<style>
+  @page { size: letter; margin: 0.42in 0.48in; }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #1c1a24;
+    font-family: "Avenir Next", Avenir, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 11px;
+    line-height: 1.32;
+  }
+  h1, h2, h3, p { margin: 0; }
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.92em;
+  }
+  .page {
+    page-break-after: always;
+    break-after: page;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+  .kicker {
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #5a45e8;
+    font-weight: 700;
+  }
+  h1 { font-size: 26px; line-height: 1.05; margin: 4px 0 6px; }
+  .lead { font-size: 12.5px; color: #3d3850; max-width: 7.2in; }
+  h2 {
+    font-size: 16px;
+    margin: 0 0 2px;
+  }
+  .sub { color: #5c5670; margin-bottom: 8px; font-size: 11px; }
+  .row { display: flex; gap: 8px; }
+  .col { flex: 1; min-width: 0; }
+  .box {
+    border: 1.5px solid #1c1a24;
+    border-radius: 8px;
+    padding: 8px 9px 9px;
+    background: #fff;
+  }
+  .box h3 { font-size: 13px; margin-bottom: 2px; }
+  .pin { background: #eef4fb; }
+  .mac { background: #f4f0ff; }
+  .out { background: #eef8f2; }
+  .warn { background: #fff6ea; }
+  .tag {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+  .tag.pin { color: #1d4e89; background: transparent; }
+  .tag.mac { color: #5b3cc4; background: transparent; }
+  .tag.out { color: #1f7a4d; background: transparent; }
+  .tag.warn { color: #9a4d08; background: transparent; }
+  ul { margin: 4px 0 0; padding-left: 16px; }
+  li { margin: 1px 0; }
+  .flow {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    margin-top: 10px;
+  }
+  .step {
+    flex: 1;
+    border: 1.5px solid #1c1a24;
+    border-radius: 8px;
+    padding: 7px 8px;
+    background: #faf9fc;
+  }
+  .step b { display: block; font-size: 12px; }
+  .arrow {
+    width: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    flex: none;
+  }
+  .fn {
+    border: 1.5px solid #1c1a24;
+    border-radius: 8px;
+    padding: 7px 8px 8px;
+    margin-bottom: 7px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .fn header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 3px;
+  }
+  .fn h3 { font-size: 13px; }
+  .where { color: #5c5670; font-size: 10px; white-space: nowrap; }
+  ol.inside {
+    margin: 0;
+    padding-left: 18px;
+  }
+  ol.inside li { margin: 1px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .grid4 { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .say {
+    font-weight: 700;
+    color: #1c1a24;
+  }
+  .foot {
+    margin-top: 8px;
+    color: #5c5670;
+    font-size: 10px;
+  }
+  .legend { display: flex; gap: 14px; margin: 8px 0 10px; font-size: 10.5px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border: 1.5px solid #1c1a24; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .sw.pin { background: #7eb0e0; }
+  .sw.mac { background: #b9a6f0; }
+  .sw.out { background: #8dccaa; }
+  .sw.warn { background: #f0c48a; }
+</style>
+</head>
+<body>
+
+<section class="page">
+  <div class="kicker">VoxPin middle school project</div>
+  <h1>How VoxPin works</h1>
+  <p class="lead">A tiny pin records your voice. A program on the Mac figures out what you asked. Then Google, the calendar, or a parent’s phone finishes the job, and the pin talks back.</p>
+  <div class="legend">
+    <span><i class="sw pin"></i>On the pin</span>
+    <span><i class="sw mac"></i>On the Mac</span>
+    <span><i class="sw out"></i>Outside services</span>
+    <span><i class="sw warn"></i>Help / alarm</span>
+  </div>
+
+  <div class="row">
+    <div class="box pin col">
+      <div class="tag pin">1 · The pin</div>
+      <h3>ESP32-S3 board</h3>
+      <ul>
+        <li>Microphone and speaker</li>
+        <li>Small color screen</li>
+        <li>Talk button, plus button, power button</li>
+        <li>Motion sensor and battery</li>
+        <li>Wi-Fi and Bluetooth</li>
+      </ul>
+    </div>
+    <div class="box mac col">
+      <div class="tag mac">2 · The Mac helper</div>
+      <h3>Python program</h3>
+      <ul>
+        <li>Listens at <code>http://…:8765</code></li>
+        <li>Shouts its address every second on UDP port 8766</li>
+        <li>Turns speech into words</li>
+        <li>Saves notes, reminders, and translations</li>
+        <li>Sends help texts</li>
+      </ul>
+    </div>
+    <div class="box out col">
+      <div class="tag out">3 · Outside</div>
+      <h3>Google and the web</h3>
+      <ul>
+        <li>Speech-to-text</li>
+        <li>Google Doc for notes</li>
+        <li>Google Calendar for reminders</li>
+        <li>Weather, maps, and answers</li>
+        <li>iMessage to a parent</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="flow">
+    <div class="step"><b>You talk</b>Hold the talk button. The pin records up to 20 seconds.</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Pin sends audio</b>Raw sound goes to the Mac at <code>/note</code>.</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Mac picks a job</b>Notes, translate, remind, ask, timer, weather, or help.</div>
+    <div class="arrow">→</div>
+    <div class="step"><b>Pin answers</b>It shows a short status and plays the spoken reply.</div>
+  </div>
+
+  <h2 style="margin-top:14px">Jobs that run at the same time</h2>
+  <p class="sub">After <code>setup()</code> in <code>voxpin_lcd.ino</code>, the pin starts these loops. The Mac starts one web server.</p>
+  <div class="grid2">
+    <div class="fn pin">
+      <header><h3>On the pin</h3><span class="where">firmware/lcd-0.85</span></header>
+      <ol class="inside">
+        <li><code>voice_note_task</code> — wait for the talk button</li>
+        <li><code>side_buttons_task</code> — wait for the plus (help) button</li>
+        <li><code>reminder_task</code> — check the calendar</li>
+        <li><code>idle_task</code> — sleep, wake, or power off</li>
+        <li><code>home_update_task</code> — clock, battery, next event</li>
+        <li><code>lvgl_task</code> — draw the screen</li>
+      </ol>
+    </div>
+    <div class="fn mac">
+      <header><h3>On the Mac</h3><span class="where">backend/voice_notes/app.py</span></header>
+      <ol class="inside">
+        <li><code>main()</code> — start the website on port 8765</li>
+        <li><code>start_helper_beacon()</code> — broadcast “VOXPIN ip port”</li>
+        <li><code>note()</code> — handle a voice clip</li>
+        <li><code>sos_alert()</code> — handle the help button</li>
+        <li><code>reminder_due()</code> and <code>announce_reminder()</code> — alarm audio</li>
+        <li>Companion pages — notes, language, calendar</li>
+      </ol>
+    </div>
+  </div>
+  <p class="foot">Print this packet in color if you can. The boxes still read in black and white.</p>
+</section>
+
+<section class="page">
+  <div class="kicker">On the pin · startup</div>
+  <h2>What happens when the pin turns on</h2>
+  <p class="sub"><code>setup()</code> in <code>voxpin_lcd.ino</code> runs once. <code>loop()</code> is empty because the other jobs keep running by themselves.</p>
+
+  <div class="fn pin">
+    <header><h3>setup()</h3><span class="where">voxpin_lcd.ino</span></header>
+    <ol class="inside">
+      <li><code>power_hold_on()</code> holds the battery switch on so the board stays powered.</li>
+      <li><code>power_init()</code> measures battery voltage on GPIO1 and checks if it is charging.</li>
+      <li><code>wifi_connect_begin()</code> joins the saved Wi-Fi (up to 45 seconds).</li>
+      <li>If Wi-Fi works, <code>home_ui_sync_time_from_ntp()</code> sets the clock from the internet.</li>
+      <li><code>ble_companion_begin()</code> starts Bluetooth so a phone can read the name and language.</li>
+      <li><code>home_ui_begin()</code> turns on the screen and draws the home page.</li>
+      <li><code>voice_note_init()</code> reserves microphone memory and starts the speaker chip.</li>
+      <li><code>voice_note_start()</code>, <code>side_buttons_start()</code>, <code>reminder_alert_start()</code>, and <code>idle_start()</code> each start their own loop.</li>
+    </ol>
+  </div>
+
+  <div class="fn pin">
+    <header><h3>Finding the Mac</h3><span class="where">wifi_connect.cpp · backend_discover()</span></header>
+    <ol class="inside">
+      <li>Listen on UDP port 8766 for a message that starts with <code>VOXPIN</code>, then an IP and a port.</li>
+      <li>Ask that address for <code>/health</code>. If it answers, remember it.</li>
+      <li>If the beacon is missing, try saved addresses and the Wi-Fi gateway on port 8765.</li>
+      <li><code>backend_fallback_cloud()</code> tries the cloud helper only if the Mac on the same Wi-Fi is not there.</li>
+    </ol>
+  </div>
+
+  <div class="grid2">
+    <div class="fn mac">
+      <header><h3>start_helper_beacon()</h3><span class="where">app.py</span></header>
+      <ol class="inside">
+        <li><code>lan_ipv4s()</code> lists the Mac’s Wi-Fi addresses.</li>
+        <li>Every second, send <code>VOXPIN &lt;ip&gt; 8765</code> to the local network.</li>
+        <li>The pin uses that message so you do not type an IP address.</li>
+      </ol>
+    </div>
+    <div class="fn mac">
+      <header><h3>main()</h3><span class="where">app.py</span></header>
+      <ol class="inside">
+        <li><code>--login</code> opens a browser so Google Calendar and Docs can be used.</li>
+        <li>Otherwise print the website address and start Flask on port 8765.</li>
+        <li>Notes and translations go to two different Google Docs.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="kicker">On the pin · talk button</div>
+  <h2>Inside the talk button</h2>
+  <p class="sub"><code>voice_note_task()</code> loops forever, waiting for the BOOT button.</p>
+
+  <div class="fn pin">
+    <header><h3>voice_note_task()</h3><span class="where">voice_note.cpp</span></header>
+    <ol class="inside">
+      <li>Wait until the talk button is pressed. Check every 20 ms.</li>
+      <li><code>idle_touch()</code> marks the pin as busy. If it was sleeping, <code>idle_wake_sync()</code> turns Wi-Fi and the bright screen back on.</li>
+      <li>Show “Recording” and read the microphone in 4096-byte chunks, 16,000 samples per second, one channel, 16-bit.</li>
+      <li>After you let go, keep a little more audio, then stop on quiet sound or after 20 seconds.</li>
+      <li><code>trim_pcm16()</code> cuts silence off the ends. If the clip is shorter than 1/4 second, show “Too short” and wait again.</li>
+      <li>Call <code>handle_clip()</code>, which turns Wi-Fi power-save off so the upload is faster.</li>
+    </ol>
+  </div>
+
+  <div class="fn pin">
+    <header><h3>handle_clip_inner()</h3><span class="where">voice_note.cpp</span></header>
+    <ol class="inside">
+      <li>If Wi-Fi is down, wait up to 10 seconds. Show “No WiFi” if it never joins.</li>
+      <li>POST the sound bytes to <code>/note</code> with sample rate, channels, and bits in the headers.</li>
+      <li>If the Mac does not answer, try the cloud helper once.</li>
+      <li>HTTP 204 means the Mac heard nothing useful. The screen says “Didn't hear”.</li>
+      <li>HTTP 200 means a short result with no audio, such as “Saved”, “Help sent”, or “Timer set”.</li>
+      <li>HTTP 201 means the body is spoken audio. <code>play_pcm()</code> plays it on the speaker, then the status clears.</li>
+    </ol>
+  </div>
+
+  <div class="fn mac">
+    <header><h3>What the Mac does first inside note()</h3><span class="where">app.py</span></header>
+    <ol class="inside">
+      <li>Read the sound bytes and the sample-rate headers.</li>
+      <li><code>pcm_to_wav()</code> wraps the raw sound in a WAV file.</li>
+      <li><code>transcribe()</code> sends that sound to Google speech-to-text in English, then <code>fix_words()</code> cleans the text.</li>
+      <li><code>parse_command()</code> looks at the first words and chooses the job. The next page is that choice.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="page">
+  <div class="kicker">On the Mac · choosing a job</div>
+  <h2>Inside parse_command()</h2>
+  <p class="sub">The function reads the sentence from the start. The first matching phrase wins. If you do not say a command, the words are saved as a note.</p>
+
+  <div class="grid2">
+    <div class="fn mac">
+      <header><h3>note</h3><span class="where">“take notes …” “write this down”</span></header>
+      <ol class="inside">
+        <li><code>store.add_recording("note")</code> saves the text on the Mac.</li>
+        <li><code>append_to_doc_later()</code> adds “Note: …” to the Google Doc.</li>
+        <li>The pin speaks “Notes added.” and shows “Saved”.</li>
+      </ol>
+    </div>
+    <div class="fn mac">
+      <header><h3>translate</h3><span class="where">“translate this …”</span></header>
+      <ol class="inside">
+        <li>Read the language chosen on the website (default Spanish).</li>
+        <li><code>translate_text()</code> translates the phrase.</li>
+        <li><code>speak_translated_pcm()</code> makes speech with the Mac <code>say</code> voice.</li>
+        <li>Save the pair in the translations Google Doc. The pin plays it.</li>
+      </ol>
+    </div>
+    <div class="fn mac">
+      <header><h3>remind</h3><span class="where">“remind me to …”</span></header>
+      <ol class="inside">
+        <li>If Calendar is not signed in, the pin says to sign in on the Mac.</li>
+        <li><code>parse_reminder()</code> finds the title, the time, and how long it lasts.</li>
+        <li><code>create_calendar_event()</code> writes it to Google Calendar.</li>
+        <li>The pin speaks the title and time, and shows “Reminded”.</li>
+      </ol>
+    </div>
+    <div class="fn mac">
+      <header><h3>ask</h3><span class="where">“what’s …” “tell me …” “who is …”</span></header>
+      <ol class="inside">
+        <li><code>answer_question()</code> checks the kind of question.</li>
+        <li>Time questions use the Mac clock. Note questions read the latest notes.</li>
+        <li>Calendar questions use <code>speak_reminders()</code>.</li>
+        <li>Other questions try DuckDuckGo, then Wikipedia. The pin speaks the answer.</li>
+      </ol>
+    </div>
+    <div class="fn mac">
+      <header><h3>timer</h3><span class="where">“set a timer …” “10 minutes”</span></header>
+      <ol class="inside">
+        <li><code>family.parse_timer()</code> turns words like “ten minutes” into a number.</li>
+        <li>A calendar event is created for that many minutes from now.</li>
+        <li>The screen shows “Timer 10m”. No long speech is sent back.</li>
+      </ol>
+    </div>
+    <div class="fn mac">
+      <header><h3>weather</h3><span class="where">“what’s the weather”</span></header>
+      <ol class="inside">
+        <li><code>family.geolocate()</code> finds a place from the network.</li>
+        <li><code>weather_summary()</code> asks Open-Meteo for temperature and rain.</li>
+        <li>The pin speaks a short line, such as “It’s 68 degrees.”</li>
+      </ol>
+    </div>
+    <div class="fn warn">
+      <header><h3>location or sos</h3><span class="where">“where am I” · “help me”</span></header>
+      <ol class="inside">
+        <li>Both call <code>handle_parent_ping()</code>.</li>
+        <li>Location shows “Sent loc”. SOS tries to text a parent. See the help page.</li>
+      </ol>
+    </div>
+    <div class="fn mac">
+      <header><h3>Nothing matched</h3><span class="where">empty or unclear audio</span></header>
+      <ol class="inside">
+        <li>If there is no transcript, <code>note()</code> returns HTTP 204.</li>
+        <li>The pin shows “Didn't hear” and does not save anything.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section class="page">
+  <div class="kicker">Help button and alarms</div>
+  <h2>Inside the plus button and reminders</h2>
+  <p class="sub">The plus button does not record your voice. It sends nearby Wi-Fi signals so the Mac can guess the place.</p>
+
+  <div class="fn warn">
+    <header><h3>side_buttons_task()</h3><span class="where">side_buttons.cpp</span></header>
+    <ol class="inside">
+      <li>Wait until the plus button is pressed, then wait until it is released.</li>
+      <li>Wake the pin if it was sleeping. Show “Sending help”.</li>
+      <li><code>scan_wifi_json()</code> lists up to 8 nearby Wi-Fi routers and how strong they are.</li>
+      <li><code>post_event("/sos")</code> POSTs that list to the Mac.</li>
+      <li>The screen shows “Help sent”, “Sent already”, “Msg failed”, or “No iMessage”.</li>
+    </ol>
+  </div>
+
+  <div class="fn warn">
+    <header><h3>sos_alert() → handle_parent_ping("sos")</h3><span class="where">app.py and family.py</span></header>
+    <ol class="inside">
+      <li><code>geolocate()</code> sends the Wi-Fi list to a location service. If that fails, it uses the public IP address, then a city name.</li>
+      <li><code>reverse_geocode()</code> turns the latitude and longitude into a neighborhood and city, plus a Google Maps link.</li>
+      <li><code>store.add_alert()</code> keeps the alert on the Mac.</li>
+      <li><code>notify_parent()</code> shows a Mac notification. For SOS it also runs Messages and sends “Sending from Voxpin, please pick me NOW!” plus the map link.</li>
+      <li>A second SOS within 5 seconds is skipped so the phone is not spammed.</li>
+    </ol>
+  </div>
+
+  <div class="fn pin">
+    <header><h3>reminder_task()</h3><span class="where">reminder_alert.cpp</span></header>
+    <ol class="inside">
+      <li>While you are using the pin, check every 20 seconds. While sleeping, wait longer, up to 10 minutes.</li>
+      <li>Skip the check if the pin is already recording or speaking.</li>
+      <li><code>fetch_due()</code> asks the Mac <code>/reminder-due</code>. The Mac looks about 10 minutes ahead on Google Calendar.</li>
+      <li>If an event is within 12 minutes, wake the pin and keep Wi-Fi on.</li>
+      <li>If this exact event was already announced, do nothing.</li>
+      <li>Otherwise show “Reminder”, <code>play_buzz()</code>, then <code>speak_due_reminder()</code> downloads speech from <code>/announce-reminder</code> and plays it.</li>
+    </ol>
+  </div>
+</section>
+
+<section class="page">
+  <div class="kicker">Screen, sleep, and the phone</div>
+  <h2>Inside the screen, sleep, and Bluetooth</h2>
+  <p class="sub">These functions keep the pin usable without you holding a button.</p>
+
+  <div class="grid2">
+    <div class="fn pin">
+      <header><h3>home_update_task()</h3><span class="where">home_ui.cpp</span></header>
+      <ol class="inside">
+        <li>Once a second, read the clock and <code>power_battery_percent()</code>.</li>
+        <li>A charging battery gets a plus sign, like <code>80%+</code>.</li>
+        <li><code>refresh_event_label()</code> asks <code>/next-event</code> at most every 30 seconds.</li>
+        <li>The screen shows time, date, battery, and the next calendar title.</li>
+        <li><code>home_ui_set_status()</code> writes words like “Recording” over that screen.</li>
+      </ol>
+    </div>
+    <div class="fn pin">
+      <header><h3>lvgl_task()</h3><span class="where">home_ui.cpp</span></header>
+      <ol class="inside">
+        <li>This is the drawing loop for the small LCD.</li>
+        <li>It clears a status message when its timer runs out.</li>
+        <li>While sleeping, it draws less often (every 200 ms instead of 20 ms) to save power.</li>
+      </ol>
+    </div>
+    <div class="fn pin">
+      <header><h3>idle_task()</h3><span class="where">idle.cpp</span></header>
+      <ol class="inside">
+        <li>If nobody touches the pin for 5 minutes, <code>enter_sleep()</code> runs.</li>
+        <li>Sleep dims the backlight, turns Wi-Fi and Bluetooth ads off, and slows the chip to 80 MHz. The clock stays on the screen.</li>
+        <li><code>imu_moved()</code> wakes it if you pick it up.</li>
+        <li>A short press of power toggles sleep. Holding power for 2 seconds calls <code>power_off()</code>.</li>
+      </ol>
+    </div>
+    <div class="fn pin">
+      <header><h3>leave_sleep()</h3><span class="where">idle.cpp</span></header>
+      <ol class="inside">
+        <li>Speed the chip back up to 240 MHz.</li>
+        <li>Brighten the screen, turn the speaker amp on, and advertise Bluetooth again.</li>
+        <li><code>wifi_wake_start()</code> rejoins Wi-Fi in the background.</li>
+        <li>The screen says “Waking” for a moment.</li>
+      </ol>
+    </div>
+    <div class="fn pin">
+      <header><h3>ble_companion_begin()</h3><span class="where">ble_companion.cpp</span></header>
+      <ol class="inside">
+        <li>The pin advertises the name “VoxPin”.</li>
+        <li>A phone can read or write a small profile: name and language.</li>
+        <li>The profile is stored on the pin with <code>Preferences</code>, so it stays after restart.</li>
+      </ol>
+    </div>
+    <div class="fn pin">
+      <header><h3>power_battery_percent()</h3><span class="where">power.cpp</span></header>
+      <ol class="inside">
+        <li>Read the battery voltage with the analog pin.</li>
+        <li>4.15 volts is about 100%. 3.20 volts is about 0%.</li>
+        <li><code>power_is_charging()</code> checks the charger pin so the screen can show a plus.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="fn out">
+    <header><h3>Companion website</h3><span class="where">open http://127.0.0.1:8765/</span></header>
+    <ol class="inside">
+      <li><b>Notes</b> shows text the pin saved. It does not store the audio clips.</li>
+      <li><b>Language</b> is the language <code>translate</code> speaks. The pin stores a copy over Bluetooth.</li>
+      <li><b>Calendar</b> shows Google Calendar events. Signing in with Google lets the site read the Doc and the calendar without the pin.</li>
+      <li>Voice from the pin can still write into that same Doc through the Mac helper.</li>
+    </ol>
+  </div>
+  <p class="foot">VoxPin architecture handout · pin firmware in firmware/lcd-0.85 · Mac helper in backend/voice_notes</p>
+</section>
+
+</body>
+</html>

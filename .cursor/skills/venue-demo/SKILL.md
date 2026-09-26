@@ -12,7 +12,7 @@ Run this instead of walking through Wi-Fi steps by hand.
 1. From the repo root, run `./venue.sh` with `all` permissions (it needs to change Wi-Fi and bind port 8765).
 2. Report Mac SSID, Mac IP, helper `http://127.0.0.1:8765/health`, and pin USB if present.
 3. Remind them to leave the helper running and keep the Mac on the hotspot.
-4. The pin already skips venue/guest Wi-Fi and joins the hotspot when home SSID is not in the scan. Do not flash unless they ask.
+4. The pin joins Makers (the event network) before home Wi-Fi and the phone hotspot. Do not flash unless they ask.
 
 ## If join fails
 

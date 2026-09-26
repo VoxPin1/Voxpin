@@ -206,11 +206,12 @@ static bool handle_clip_inner(uint8_t *data, uint32_t len)
   }
 
   bool tried_cloud = false;
+  int local_tries = 0;
   for (;;) {
     WiFiClientSecure tls;
     WiFiClient plain;
     HTTPClient http;
-    http.setTimeout(90000);
+    http.setTimeout(20000);
     if (!backend_http_begin(http, tls, plain, "/note")) {
       http.end();
       if (!tried_cloud && backend_fallback_cloud()) {
@@ -230,6 +231,14 @@ static bool handle_clip_inner(uint8_t *data, uint32_t len)
 
     int code = http.POST(data, len);
     String pin_status = http.header("X-Status");
+    // Venue Wi-Fi often drops the first upload. Retry this Mac before
+    // spending time on the cloud fallback.
+    if (code < 0 && !tried_cloud && local_tries < 2) {
+      http.end();
+      local_tries++;
+      delay(250);
+      continue;
+    }
     if (code < 0 && !tried_cloud && backend_fallback_cloud()) {
       http.end();
       tried_cloud = true;

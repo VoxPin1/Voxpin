@@ -32,11 +32,20 @@ bool backend_fallback_cloud();
 
 inline void backend_make_url(char *out, size_t out_len, const char *path)
 {
-  if ((g_backend_port == 443 && strcmp(g_backend_scheme, "https") == 0) ||
-      (g_backend_port == 80 && strcmp(g_backend_scheme, "http") == 0)) {
+  const bool v6 = strchr(g_backend_host, ':') != NULL;
+  const bool default_port =
+      (g_backend_port == 443 && strcmp(g_backend_scheme, "https") == 0) ||
+      (g_backend_port == 80 && strcmp(g_backend_scheme, "http") == 0);
+  if (v6 && default_port) {
+    snprintf(out, out_len, "%s://[%s]%s", g_backend_scheme, g_backend_host, path);
+  } else if (v6) {
+    snprintf(out, out_len, "%s://[%s]:%d%s", g_backend_scheme, g_backend_host,
+             g_backend_port, path);
+  } else if (default_port) {
     snprintf(out, out_len, "%s://%s%s", g_backend_scheme, g_backend_host, path);
   } else {
-    snprintf(out, out_len, "%s://%s:%d%s", g_backend_scheme, g_backend_host, g_backend_port, path);
+    snprintf(out, out_len, "%s://%s:%d%s", g_backend_scheme, g_backend_host,
+             g_backend_port, path);
   }
 }
 

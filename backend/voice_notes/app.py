@@ -96,6 +96,39 @@ SAY_VOICES = {
 app = Flask(__name__, static_folder=STATIC_DIR, static_url_path="/static")
 
 
+def broadcast_for(ip: str) -> list[str]:
+    """Directed broadcasts for this address, including non-/24 masks."""
+    found: list[str] = []
+    try:
+        out = subprocess.check_output(["ifconfig"], text=True)
+    except (OSError, subprocess.CalledProcessError):
+        return found
+    for line in out.splitlines():
+        line = line.strip()
+        if not line.startswith("inet ") or ip not in line.split():
+            continue
+        parts = line.split()
+        if "broadcast" in parts:
+            bcast = parts[parts.index("broadcast") + 1]
+            if bcast not in found:
+                found.append(bcast)
+        elif "netmask" in parts:
+            mask = parts[parts.index("netmask") + 1]
+            try:
+                addr = int.from_bytes(bytes(int(p) for p in ip.split(".")), "big")
+                if mask.startswith("0x"):
+                    bits = int(mask, 16)
+                else:
+                    bits = int.from_bytes(bytes(int(p) for p in mask.split(".")), "big")
+                bcast_ip = addr | (~bits & 0xFFFFFFFF)
+                text = ".".join(str((bcast_ip >> shift) & 0xFF) for shift in (24, 16, 8, 0))
+                if text not in found:
+                    found.append(text)
+            except ValueError:
+                pass
+    return found
+
+
 def lan_ipv4s() -> list[str]:
     ips: list[str] = []
     try:
@@ -127,9 +160,8 @@ def start_helper_beacon(port: int) -> None:
                 msg = f"VOXPIN {ip} {port}".encode("ascii")
                 try:
                     sock.sendto(msg, ("255.255.255.255", BEACON_PORT))
-                    parts = ip.split(".")
-                    if len(parts) == 4:
-                        sock.sendto(msg, (f"{parts[0]}.{parts[1]}.{parts[2]}.255", BEACON_PORT))
+                    for bcast in broadcast_for(ip):
+                        sock.sendto(msg, (bcast, BEACON_PORT))
                 except OSError:
                     pass
             time.sleep(1.0)
@@ -2105,6 +2137,11 @@ def api_alerts():
 def note():
     pcm = request.get_data(cache=False)
     if not pcm:
+        print(
+            f"empty audio from {request.remote_addr} "
+            f"content-length={request.content_length}",
+            flush=True,
+        )
         return jsonify({"ok": False, "error": "empty audio"}), 400
 
     sample_rate = int(request.headers.get("X-Sample-Rate", "16000"))
@@ -2289,6 +2326,36 @@ def note():
         return jsonify({"ok": False, "error": str(err)}), 500
 
 
+def start_helper_mdns(port: int) -> None:
+    """Advertise the helper so the pin can find this Mac over IPv6."""
+    try:
+        subprocess.Popen(
+            ["dns-sd", "-R", "VoxPin", "_voxpin._tcp", "local", str(port)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        print(f"mDNS _voxpin._tcp on {port}")
+    except OSError as err:
+        print(f"mDNS advertise failed: {err}")
+
+
+def start_ipv6_server(port: int) -> None:
+    """Listen on IPv6. iPhone hotspot hides this Mac's IPv4 from the pin."""
+
+    def serve() -> None:
+        from werkzeug.serving import make_server
+
+        try:
+            httpd = make_server("::", port, app, threaded=True)
+        except OSError as err:
+            print(f"IPv6 listen failed: {err}")
+            return
+        print(f"Listening on [::]:{port}")
+        httpd.serve_forever()
+
+    threading.Thread(target=serve, name="voxpin-ipv6", daemon=True).start()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="VoxPin voice-note backend")
     parser.add_argument(
@@ -2320,6 +2387,8 @@ def main() -> int:
     else:
         print("Google Calendar not connected. Run ./run.sh --login to show events and add reminders.")
     start_helper_beacon(args.port)
+    start_helper_mdns(args.port)
+    start_ipv6_server(args.port)
     app.run(host="0.0.0.0", port=args.port, threaded=True)
     return 0
 

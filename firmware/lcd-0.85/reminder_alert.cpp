@@ -248,7 +248,6 @@ static void restore_sleep_radio(bool woke_radio)
 {
   (void)woke_radio;
   if (idle_is_sleeping()) {
-    wifi_radio_off();
     setCpuFrequencyMhz(80);
   }
 }

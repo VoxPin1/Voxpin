@@ -18,6 +18,11 @@ void setup()
 
   power_init();
 
+  // Light the screen before Wi-Fi. Joining venue access points can take
+  // a minute, and a black screen looks like the pin is off.
+  home_ui_begin();
+  home_ui_set_status("Connecting");
+
   if (wifi_connect_begin(45000)) {
     Serial.print("WiFi connected, IP: ");
     Serial.println(wifi_connect_ip());
@@ -26,9 +31,9 @@ void setup()
   } else {
     Serial.println("WiFi failed — clock waits for NTP");
   }
+  home_ui_set_status("");
 
   ble_companion_begin();
-  home_ui_begin();
   voice_note_init();
   voice_note_start(home_ui_set_status);
   side_buttons_start(home_ui_set_status);
@@ -38,4 +43,8 @@ void setup()
   Serial.flush();
 }
 
-void loop() {}
+void loop()
+{
+  wifi_maintain();
+  delay(100);
+}

@@ -19,6 +19,7 @@
 #include "freertos/task.h"
 #include "lvgl.h"
 #include "power.h"
+#include "voice_note.h"
 
 static Arduino_DataBus *bus = new Arduino_ESP32SPI(
   LCD_DC_PIN, LCD_CS_PIN, LCD_SCK_PIN, LCD_MOSI_PIN, GFX_NOT_DEFINED);
@@ -91,7 +92,9 @@ static bool json_str(const char *json, const char *key, char *out, size_t out_le
 
 static void refresh_event_label(void)
 {
-  if (ui_paused || WiFi.status() != WL_CONNECTED || audio_is_playing()) {
+  // A voice upload uses the only reliable socket. Don't start a second
+  // request on top of it — that drops the upload and the pin shows "No server".
+  if (ui_paused || voice_note_is_busy() || WiFi.status() != WL_CONNECTED || audio_is_playing()) {
     return;
   }
   if (last_event_fetch_ms != 0 && (millis() - last_event_fetch_ms) < 30000) {
