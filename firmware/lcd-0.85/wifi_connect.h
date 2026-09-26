@@ -9,3 +9,5 @@ void wifi_radio_off(void);
 String wifi_connect_ip();
 bool wifi_is_connected(void);
 bool wifi_wait_connected(uint32_t timeout_ms);
+void wifi_set_fast(bool fast);
+bool wifi_quick_join(uint32_t timeout_ms);

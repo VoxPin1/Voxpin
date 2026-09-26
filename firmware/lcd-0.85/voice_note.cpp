@@ -194,7 +194,7 @@ static uint32_t read_response(HTTPClient &http, uint8_t *dest, uint32_t max_len)
   return got;
 }
 
-static bool handle_clip(uint8_t *data, uint32_t len)
+static bool handle_clip_inner(uint8_t *data, uint32_t len)
 {
   if (WiFi.status() != WL_CONNECTED) {
     show_status("Connecting", 0);
@@ -292,6 +292,15 @@ static bool handle_clip(uint8_t *data, uint32_t len)
     audio_set_playing(false);
     return true;
   }
+}
+
+// Upload and reply download run with WiFi power save off so talking stays snappy.
+static bool handle_clip(uint8_t *data, uint32_t len)
+{
+  wifi_set_fast(true);
+  const bool ok = handle_clip_inner(data, len);
+  wifi_set_fast(false);
+  return ok;
 }
 
 static void voice_note_task(void *arg)

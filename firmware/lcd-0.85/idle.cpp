@@ -58,6 +58,7 @@ static void enter_sleep(void)
   wifi_radio_off();
   ble_companion_sleep();
   audio_pa_enable(false);
+  setCpuFrequencyMhz(80);
   Serial.println("Idle: home stays on, radios off");
 }
 
@@ -67,6 +68,7 @@ static void leave_sleep(void)
     return;
   }
   sleeping = false;
+  setCpuFrequencyMhz(240);
   idle_touch();
   home_ui_set_backlight(255);
   home_ui_set_paused(false);

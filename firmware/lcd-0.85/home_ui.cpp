@@ -91,7 +91,7 @@ static bool json_str(const char *json, const char *key, char *out, size_t out_le
 
 static void refresh_event_label(void)
 {
-  if (WiFi.status() != WL_CONNECTED || audio_is_playing()) {
+  if (ui_paused || WiFi.status() != WL_CONNECTED || audio_is_playing()) {
     return;
   }
   if (last_event_fetch_ms != 0 && (millis() - last_event_fetch_ms) < 30000) {

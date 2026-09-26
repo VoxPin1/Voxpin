@@ -11,6 +11,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "idle.h"
 
 char g_backend_host[64] = BACKEND_HOST;
 int g_backend_port = BACKEND_PORT;
@@ -271,7 +272,7 @@ static bool join_known_networks(uint32_t timeout_ms)
 {
   (void)timeout_ms;
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
+  WiFi.setSleep(true);  // modem power save; voice clips turn it off briefly
   wifi_idle();
 
   int n = WiFi.scanNetworks(false, true, false, 500);
@@ -331,16 +332,21 @@ static void wifi_wake_task(void *arg)
 {
   (void)arg;
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false);
-  WiFi.begin();
+  WiFi.setSleep(true);  // modem power save; voice clips turn it off briefly
+  // Rejoin home by name; a bare begin() has no saved network after WIFI_OFF,
+  // which forced a slow full scan on every wake.
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   const uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED && (millis() - start) < 3000) {
     vTaskDelay(pdMS_TO_TICKS(40));
   }
-  if (WiFi.status() != WL_CONNECTED) {
+  if (WiFi.status() != WL_CONNECTED && !idle_is_sleeping()) {
     join_known_networks(0);
   }
-  if (WiFi.status() == WL_CONNECTED) {
+  if (idle_is_sleeping()) {
+    // The pin went back to sleep while we were reconnecting.
+    wifi_radio_off();
+  } else if (WiFi.status() == WL_CONNECTED) {
     if (!probe_health(g_backend_host, g_backend_port, g_backend_scheme)) {
       backend_discover(1200);
     }
@@ -360,6 +366,34 @@ void wifi_wake_start(void)
   }
 }
 
+// Synchronous rejoin for the sleeping reminder check. Try the home network
+// directly (no scan), then fall back to the full scan + hotspot join.
+bool wifi_quick_join(uint32_t timeout_ms)
+{
+  const uint32_t wait_start = millis();
+  while (wifi_wake_running && (millis() - wait_start) < 30000) {
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+  if (WiFi.status() == WL_CONNECTED) {
+    return true;
+  }
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(true);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  const uint32_t start = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeout_ms) {
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+  if (WiFi.status() != WL_CONNECTED && !wifi_connect_begin(25000)) {
+    Serial.println("Sleep check: WiFi join failed");
+    return false;
+  }
+  if (!probe_health(g_backend_host, g_backend_port, g_backend_scheme)) {
+    backend_discover(1200);
+  }
+  return WiFi.status() == WL_CONNECTED;
+}
+
 void wifi_radio_off(void)
 {
   WiFi.disconnect(true, false);
@@ -369,6 +403,11 @@ void wifi_radio_off(void)
 bool wifi_is_connected(void)
 {
   return WiFi.status() == WL_CONNECTED;
+}
+
+void wifi_set_fast(bool fast)
+{
+  WiFi.setSleep(!fast);
 }
 
 // After idle sleep the radio is off and wifi_wake_task reconnects in the

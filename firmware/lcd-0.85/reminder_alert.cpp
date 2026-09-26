@@ -31,7 +31,10 @@ static constexpr uint32_t kMaxSpeakBytes =
   kSampleRate * kPlayChannels * (kBits / 8) * kMaxSpeakSeconds;
 static constexpr int kStayAwakeMinutes = 12;
 static constexpr uint32_t kAwakePollMs = 20000;
-static constexpr uint32_t kSleepPollMs = 45000;
+// While asleep, check less often when the next event is far away. Waking the
+// radio is the pin's biggest battery cost, so a 45 s poll drained it fast.
+static constexpr uint32_t kSleepPollMinMs = 45000;
+static constexpr uint32_t kSleepPollMaxMs = 10 * 60 * 1000;
 
 static uint8_t *speak_buf = NULL;
 static char last_alert_key[96] = "";
@@ -235,13 +238,18 @@ static bool ensure_wifi(bool *woke_radio)
     return true;
   }
   *woke_radio = idle_is_sleeping();
-  return wifi_reconnect(12000);
+  if (*woke_radio) {
+    setCpuFrequencyMhz(240);  // join fast, then drop back in restore_sleep_radio
+  }
+  return wifi_quick_join(8000);
 }
 
 static void restore_sleep_radio(bool woke_radio)
 {
-  if (woke_radio && idle_is_sleeping()) {
+  (void)woke_radio;
+  if (idle_is_sleeping()) {
     wifi_radio_off();
+    setCpuFrequencyMhz(80);
   }
 }
 
@@ -324,12 +332,44 @@ static bool speak_due_reminder(void)
   return true;
 }
 
+static uint32_t sleep_poll_ms = kSleepPollMinMs;
+
+// Wake early enough to be inside the stay-awake window before the next event.
+static void plan_sleep_poll(int minutes_until)
+{
+  if (minutes_until < 0) {
+    sleep_poll_ms = kSleepPollMaxMs;
+    return;
+  }
+  const int lead_min = minutes_until - kStayAwakeMinutes - 2;
+  if (lead_min <= 0) {
+    sleep_poll_ms = kSleepPollMinMs;
+  } else {
+    const uint32_t ms = (uint32_t)lead_min * 60000UL;
+    sleep_poll_ms = ms < kSleepPollMinMs ? kSleepPollMinMs : (ms > kSleepPollMaxMs ? kSleepPollMaxMs : ms);
+  }
+}
+
+// Sleep until the next poll, but check right away if the pin wakes up.
+static void wait_next_poll(void)
+{
+  const bool was_sleeping = idle_is_sleeping();
+  const uint32_t wait_ms = was_sleeping ? sleep_poll_ms : kAwakePollMs;
+  const uint32_t start = millis();
+  while ((millis() - start) < wait_ms) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    if (was_sleeping && !idle_is_sleeping()) {
+      return;
+    }
+  }
+}
+
 static void reminder_task(void *arg)
 {
   (void)arg;
   for (;;) {
+    wait_next_poll();
     const bool sleeping = idle_is_sleeping();
-    vTaskDelay(pdMS_TO_TICKS(sleeping ? kSleepPollMs : kAwakePollMs));
 
     if (voice_note_is_busy() || audio_is_playing()) {
       continue;
@@ -351,6 +391,7 @@ static void reminder_task(void *arg)
       restore_sleep_radio(woke_radio);
       continue;
     }
+    plan_sleep_poll(minutes_until);
 
     if (minutes_until >= 0 && minutes_until <= kStayAwakeMinutes) {
       if (idle_is_sleeping()) {
