@@ -758,9 +758,12 @@ CORRECTIONS = {
 
 
 def fix_words(text: str) -> str:
+    fixed = text
     for wrong, right in CORRECTIONS.items():
-        text = re.sub(wrong, right, text, flags=re.IGNORECASE)
-    return text
+        fixed = re.sub(wrong, right, fixed, flags=re.IGNORECASE)
+    if fixed != text:
+        print(f"corrected: {text!r} -> {fixed!r}", flush=True)
+    return fixed
 
 
 def transcribe(wav_bytes: bytes, language: str = "en") -> str:
