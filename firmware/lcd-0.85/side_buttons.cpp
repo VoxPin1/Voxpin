@@ -14,6 +14,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "idle.h"
+#include "wifi_connect.h"
 
 static const char *TAG = "side_btn";
 static void (*status_cb)(const char *text) = NULL;
@@ -78,8 +79,11 @@ static int scan_wifi_json(char *out, size_t out_len)
 static bool post_event(const char *path, const char *ok_status)
 {
   if (WiFi.status() != WL_CONNECTED) {
-    set_status("No WiFi", 2500);
-    return false;
+    set_status("Connecting", 0);
+    if (!wifi_wait_connected(10000)) {
+      set_status("No WiFi", 2500);
+      return false;
+    }
   }
 
   char body[640];

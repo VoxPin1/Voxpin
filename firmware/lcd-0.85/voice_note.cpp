@@ -17,6 +17,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "idle.h"
+#include "wifi_connect.h"
 
 static const char *TAG = "voice_note";
 
@@ -196,8 +197,12 @@ static uint32_t read_response(HTTPClient &http, uint8_t *dest, uint32_t max_len)
 static bool handle_clip(uint8_t *data, uint32_t len)
 {
   if (WiFi.status() != WL_CONNECTED) {
-    show_status("No WiFi", 2500);
-    return false;
+    show_status("Connecting", 0);
+    if (!wifi_wait_connected(10000)) {
+      show_status("No WiFi", 2500);
+      return false;
+    }
+    show_status("Sending", 0);
   }
 
   bool tried_cloud = false;

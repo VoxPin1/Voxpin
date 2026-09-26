@@ -8,3 +8,4 @@ void wifi_wake_start(void);
 void wifi_radio_off(void);
 String wifi_connect_ip();
 bool wifi_is_connected(void);
+bool wifi_wait_connected(uint32_t timeout_ms);

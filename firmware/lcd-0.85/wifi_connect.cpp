@@ -371,6 +371,18 @@ bool wifi_is_connected(void)
   return WiFi.status() == WL_CONNECTED;
 }
 
+// After idle sleep the radio is off and wifi_wake_task reconnects in the
+// background, so callers about to send must wait for it instead of failing.
+bool wifi_wait_connected(uint32_t timeout_ms)
+{
+  const uint32_t start = millis();
+  while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeout_ms) {
+    wifi_wake_start();
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+  return WiFi.status() == WL_CONNECTED;
+}
+
 String wifi_connect_ip()
 {
   if (WiFi.status() != WL_CONNECTED) {
