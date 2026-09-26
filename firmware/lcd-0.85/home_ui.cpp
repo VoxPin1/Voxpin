@@ -139,6 +139,15 @@ static void refresh_event_label(void)
   lv_label_set_text(event_label, last_event_text[0] ? last_event_text : "No events");
 }
 
+// Only touch labels whose text changed, so the sleeping screen redraws about
+// once a minute instead of every second.
+static void set_label_if_changed(lv_obj_t *label, const char *text)
+{
+  if (strcmp(lv_label_get_text(label), text) != 0) {
+    lv_label_set_text(label, text);
+  }
+}
+
 static void update_home_labels(void)
 {
   struct tm timeinfo {};
@@ -174,10 +183,12 @@ static void update_home_labels(void)
     snprintf(bat_text, sizeof(bat_text), "%d%%", pct);
   }
 
-  lv_arc_set_value(battery_arc, pct);
-  lv_label_set_text(battery_label, bat_text);
-  lv_label_set_text(time_label, time_text);
-  lv_label_set_text(date_label, date_text);
+  if (lv_arc_get_value(battery_arc) != pct) {
+    lv_arc_set_value(battery_arc, pct);
+  }
+  set_label_if_changed(battery_label, bat_text);
+  set_label_if_changed(time_label, time_text);
+  set_label_if_changed(date_label, date_text);
   refresh_event_label();
 }
 
@@ -185,7 +196,7 @@ static void lvgl_task(void *arg)
 {
   (void)arg;
   for (;;) {
-    if (!ui_paused && ui_lock(-1)) {
+    if (ui_lock(-1)) {
       if (status_clear_at != 0 && (int32_t)(millis() - status_clear_at) >= 0) {
         status_clear_at = 0;
         if (status_label != NULL) {
@@ -203,11 +214,11 @@ static void home_update_task(void *arg)
 {
   (void)arg;
   for (;;) {
-    if (!ui_paused && ui_lock(-1)) {
+    if (ui_lock(-1)) {
       update_home_labels();
       ui_unlock();
     }
-    vTaskDelay(pdMS_TO_TICKS(ui_paused ? 1000 : 1000));
+    vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
 
