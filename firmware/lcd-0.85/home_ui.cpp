@@ -25,7 +25,7 @@ static Arduino_DataBus *bus = new Arduino_ESP32SPI(
 static Arduino_GFX *gfx = new Arduino_GC9107(bus, LCD_RST_PIN, 0, true);
 
 static SemaphoreHandle_t lvgl_mux = NULL;
-static lv_obj_t *battery_bar = NULL;
+static lv_obj_t *battery_arc = NULL;
 static lv_obj_t *battery_label = NULL;
 static lv_obj_t *time_label = NULL;
 static lv_obj_t *date_label = NULL;
@@ -174,7 +174,7 @@ static void update_home_labels(void)
     snprintf(bat_text, sizeof(bat_text), "%d%%", pct);
   }
 
-  lv_bar_set_value(battery_bar, pct, LV_ANIM_OFF);
+  lv_arc_set_value(battery_arc, pct);
   lv_label_set_text(battery_label, bat_text);
   lv_label_set_text(time_label, time_text);
   lv_label_set_text(date_label, date_text);
@@ -290,19 +290,26 @@ void home_ui_begin(void)
   lv_obj_set_style_bg_color(scr, lv_color_hex(0x000000), 0);
   lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
 
-  battery_bar = lv_bar_create(scr);
-  lv_obj_set_size(battery_bar, LCD_WIDTH - 36, 8);
-  lv_obj_align(battery_bar, LV_ALIGN_TOP_LEFT, 4, 4);
-  lv_obj_set_style_radius(battery_bar, 2, LV_PART_MAIN);
-  lv_obj_set_style_radius(battery_bar, 2, LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(battery_bar, lv_color_hex(0x222222), LV_PART_MAIN);
-  lv_obj_set_style_bg_color(battery_bar, lv_color_hex(0x4CD964), LV_PART_INDICATOR);
-  lv_bar_set_range(battery_bar, 0, 100);
+  // Battery arc - large green circle around the screen
+  battery_arc = lv_arc_create(scr);
+  lv_obj_set_size(battery_arc, 120, 120);
+  lv_obj_align(battery_arc, LV_ALIGN_CENTER, 0, 0);
+  lv_arc_set_rotation(battery_arc, 270);
+  lv_arc_set_bg_angles(battery_arc, 0, 360);
+  lv_arc_set_range(battery_arc, 0, 100);
+  lv_obj_remove_style(battery_arc, NULL, LV_PART_KNOB);
+  lv_obj_clear_flag(battery_arc, LV_OBJ_FLAG_CLICKABLE);
+  // Background track (dark gray)
+  lv_obj_set_style_arc_color(battery_arc, lv_color_hex(0x222222), LV_PART_MAIN);
+  lv_obj_set_style_arc_width(battery_arc, 8, LV_PART_MAIN);
+  // Indicator (green)
+  lv_obj_set_style_arc_color(battery_arc, lv_color_hex(0x4CD964), LV_PART_INDICATOR);
+  lv_obj_set_style_arc_width(battery_arc, 8, LV_PART_INDICATOR);
 
   battery_label = lv_label_create(scr);
   lv_obj_set_style_text_font(battery_label, &lv_font_montserrat_12, 0);
-  lv_obj_set_style_text_color(battery_label, lv_color_white(), 0);
-  lv_obj_align(battery_label, LV_ALIGN_TOP_RIGHT, -2, 2);
+  lv_obj_set_style_text_color(battery_label, lv_color_hex(0x4CD964), 0);
+  lv_obj_align(battery_label, LV_ALIGN_TOP_MID, 0, 12);
   lv_label_set_text(battery_label, "--%");
 
   time_label = lv_label_create(scr);
@@ -312,7 +319,7 @@ void home_ui_begin(void)
   lv_obj_set_style_pad_all(time_label, 0, 0);
   lv_obj_set_style_pad_bottom(time_label, 0, 0);
   lv_obj_set_width(time_label, LCD_WIDTH);
-  lv_obj_align(time_label, LV_ALIGN_TOP_MID, 0, 14);
+  lv_obj_align(time_label, LV_ALIGN_CENTER, 0, -20);
 
   date_label = lv_label_create(scr);
   lv_obj_set_style_text_font(date_label, &lv_font_montserrat_12, 0);
@@ -324,7 +331,7 @@ void home_ui_begin(void)
 
   event_label = lv_label_create(scr);
   lv_obj_set_style_text_font(event_label, &lv_font_montserrat_12, 0);
-  lv_obj_set_style_text_color(event_label, lv_color_hex(0x7FDBFF), 0);
+  lv_obj_set_style_text_color(event_label, lv_color_hex(0x8B008B), 0);
   lv_obj_set_style_text_align(event_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_pad_all(event_label, 0, 0);
   lv_obj_set_style_text_line_space(event_label, 0, 0);
@@ -336,7 +343,7 @@ void home_ui_begin(void)
 
   status_label = lv_label_create(scr);
   lv_obj_set_style_text_font(status_label, &lv_font_montserrat_12, 0);
-  lv_obj_set_style_text_color(status_label, lv_color_hex(0xFFDC00), 0);
+  lv_obj_set_style_text_color(status_label, lv_color_hex(0x006400), 0);
   lv_obj_set_style_text_align(status_label, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_width(status_label, LCD_WIDTH);
   lv_obj_align(status_label, LV_ALIGN_BOTTOM_MID, 0, -4);
