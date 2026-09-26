@@ -51,7 +51,7 @@ TRANSLATIONS_DOCUMENT_URL = os.environ.get(
     f"https://docs.google.com/document/d/{TRANSLATIONS_DOCUMENT_ID}/edit",
 )
 # Primary calendar for reminders + companion month view (from your Calendar share link).
-CALENDAR_ID = os.environ.get("VOXPIN_CALENDAR_ID", "riangadey12@gmail.com")
+CALENDAR_ID = os.environ.get("VOXPIN_CALENDAR_ID", "primary")
 CALENDAR_URL = os.environ.get(
     "VOXPIN_CALENDAR_URL",
     "https://calendar.google.com/calendar/u/0?cid=cmlhbmdhZGV5MTJAZ21haWwuY29t",
