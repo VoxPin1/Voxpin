@@ -567,9 +567,9 @@ def append_via_webhook(
     import json
     import urllib.request
 
-    now = datetime.now()
+    now = now_local()
     stamp = now.strftime("%Y-%m-%d %-I:%M %p")
-    day = now.strftime("%b %-d, %Y")
+    day = day_tab_title(now)
     if not document_id:
         document_id = (
             TRANSLATIONS_DOCUMENT_ID if kind == "translate" else DOCUMENT_ID
@@ -595,41 +595,128 @@ def append_via_webhook(
         raise RuntimeError(body.get("error", "Apps Script append failed"))
 
 
-def _append_via_docs_api(text: str, document_id: str) -> None:
-    service = docs_service()
-    document = service.documents().get(
+_MONTHS = (
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+)
+
+
+def day_tab_title(when: datetime | None = None) -> str:
+    """Match the day headings already in the notes doc, e.g. 'Sep 25, 2026'."""
+    when = when or now_local()
+    return f"{_MONTHS[when.month - 1]} {when.day}, {when.year}"
+
+
+def _load_doc_tabs(service, document_id: str) -> dict:
+    return service.documents().get(
         documentId=document_id, includeTabsContent=True
     ).execute()
-    stamp = datetime.now().strftime("%Y-%m-%d %-I:%M %p")
-    payload = f"{stamp}\n{text}\n\n"
-    tab_id = None
-    end_index = None
+
+
+def _main_tab(document) -> tuple[str | None, list]:
     tabs = document.get("tabs") or []
-    if tabs:
-        tab = tabs[0]
-        tab_id = (tab.get("tabProperties") or {}).get("tabId")
-        content = (
-            ((tab.get("documentTab") or {}).get("body") or {}).get("content") or []
-        )
-        if content:
-            end_index = content[-1].get("endIndex")
-    if end_index is None:
-        end_index = document["body"]["content"][-1]["endIndex"]
-    location = {"index": end_index - 1}
+    if not tabs:
+        return None, (document.get("body") or {}).get("content") or []
+    tab = tabs[0]
+    content = ((tab.get("documentTab") or {}).get("body") or {}).get("content") or []
+    tab_id = (tab.get("tabProperties") or {}).get("tabId")
+    return tab_id, content
+
+
+def _paragraph_plain(element) -> str:
+    para = element.get("paragraph") or {}
+    parts = []
+    for el in para.get("elements") or []:
+        parts.append((el.get("textRun") or {}).get("content") or "")
+    return "".join(parts)
+
+
+def _day_heading_exists(content, title: str) -> bool:
+    for element in content:
+        para = element.get("paragraph")
+        if not para:
+            continue
+        style = (para.get("paragraphStyle") or {}).get("namedStyleType")
+        if style == "HEADING_1" and _paragraph_plain(element).strip() == title:
+            return True
+    return False
+
+
+def _first_index_for_day(content, date_prefix: str) -> int | None:
+    for element in content:
+        if date_prefix in _paragraph_plain(element):
+            start = element.get("startIndex")
+            if start:
+                return start
+    return None
+
+
+def _with_tab(location_or_range: dict, tab_id: str | None) -> dict:
     if tab_id:
-        location["tabId"] = tab_id
-    service.documents().batchUpdate(
-        documentId=document_id,
-        body={
-            "requests": [
-                {
-                    "insertText": {
-                        "location": location,
-                        "text": payload,
-                    }
+        location_or_range["tabId"] = tab_id
+    return location_or_range
+
+
+def _append_via_docs_api(text: str, document_id: str) -> None:
+    service = docs_service()
+    now = now_local()
+    title = day_tab_title(now)
+    payload = f"{now.strftime('%Y-%m-%d %-I:%M %p')}\n{text}\n\n"
+    document = _load_doc_tabs(service, document_id)
+    tab_id, content = _main_tab(document)
+    end_index = content[-1].get("endIndex") if content else 1
+    note_at = max((end_index or 1) - 1, 1)
+    requests = []
+    if not _day_heading_exists(content, title):
+        heading = f"{title}\n"
+        insert_at = _first_index_for_day(content, now.strftime("%Y-%m-%d"))
+        if insert_at is None:
+            insert_at = note_at
+        requests.append(
+            {
+                "insertText": {
+                    "location": _with_tab({"index": insert_at}, tab_id),
+                    "text": heading,
                 }
-            ]
-        },
+            }
+        )
+        requests.append(
+            {
+                "updateParagraphStyle": {
+                    "range": _with_tab(
+                        {
+                            "startIndex": insert_at,
+                            "endIndex": insert_at + len(heading),
+                        },
+                        tab_id,
+                    ),
+                    "paragraphStyle": {"namedStyleType": "HEADING_1"},
+                    "fields": "namedStyleType",
+                }
+            }
+        )
+        if insert_at <= note_at:
+            note_at += len(heading)
+    requests.append(
+        {
+            "insertText": {
+                "location": _with_tab({"index": note_at}, tab_id),
+                "text": payload,
+            }
+        }
+    )
+    service.documents().batchUpdate(
+        documentId=document_id, body={"requests": requests}
     ).execute()
 
 
