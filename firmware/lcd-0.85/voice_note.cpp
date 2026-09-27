@@ -32,8 +32,11 @@ static constexpr uint32_t kMaxRecordBytes = kBytesPerSec * kMaxSeconds;
 static constexpr uint32_t kMaxBytes = kSampleRate * kPlayChannels * (kBits / 8) * kMaxSeconds;
 static constexpr uint32_t kMinBytes = kBytesPerSec / 4;
 static constexpr uint32_t kHoldToTalkMs = 400;
+static constexpr uint32_t kHeldReleaseTailBytes = kBytesPerSec / 4;
 static constexpr uint32_t kSilenceStopBytes = kBytesPerSec / 3;
 static constexpr uint32_t kMaxAfterReleaseBytes = kBytesPerSec * 2;
+// Clips upload at half the mic rate: half the bytes, still fine for speech.
+static constexpr uint32_t kUploadSampleRate = kSampleRate / 2;
 
 static uint8_t *audio_buf = NULL;
 static voice_status_cb_t status_cb = NULL;
@@ -194,11 +197,24 @@ static uint32_t read_response(HTTPClient &http, uint8_t *dest, uint32_t max_len)
   return got;
 }
 
+// Halve the sample rate in place by averaging sample pairs. Returns new length.
+static uint32_t downsample_half(uint8_t *data, uint32_t len)
+{
+  int16_t *s = (int16_t *)data;
+  const uint32_t out = len / 4;
+  for (uint32_t i = 0; i < out; i++) {
+    s[i] = (int16_t)(((int32_t)s[i * 2] + (int32_t)s[i * 2 + 1]) / 2);
+  }
+  return out * 2;
+}
+
 static bool handle_clip_inner(uint8_t *data, uint32_t len)
 {
+  len = downsample_half(data, len);
+
   if (WiFi.status() != WL_CONNECTED) {
     show_status("Connecting", 0);
-    if (!wifi_wait_connected(10000)) {
+    if (!wifi_wait_connected(30000)) {
       show_status("No WiFi", 2500);
       return false;
     }
@@ -223,7 +239,8 @@ static bool handle_clip_inner(uint8_t *data, uint32_t len)
     }
 
     http.addHeader("Content-Type", "application/octet-stream");
-    http.addHeader("X-Sample-Rate", "16000");
+    http.addHeader("X-Sample-Rate", String(kUploadSampleRate));
+    http.addHeader("X-Reply-Rate", String(kSampleRate));
     http.addHeader("X-Channels", "1");
     http.addHeader("X-Bits", "16");
     const char *header_keys[] = {"X-Action", "X-Status", "X-Channels"};
@@ -365,7 +382,9 @@ static void voice_note_task(void *arg)
           silence_bytes += kChunkBytes;
         }
         const bool held = (millis() - press_started) >= kHoldToTalkMs;
-        if (held && silence_bytes >= kSilenceStopBytes) {
+        // Hold-to-talk: releasing means done. Don't wait for silence, which
+        // never comes in a noisy room.
+        if (held && (silence_bytes >= kSilenceStopBytes || after_release >= kHeldReleaseTailBytes)) {
           break;
         }
         if (!held && (silence_bytes >= kSilenceStopBytes || after_release >= kMaxAfterReleaseBytes)) {

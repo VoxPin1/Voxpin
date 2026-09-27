@@ -26,10 +26,14 @@ void setup()
   if (wifi_connect_begin(45000)) {
     Serial.print("WiFi connected, IP: ");
     Serial.println(wifi_connect_ip());
-    home_ui_sync_time_from_ntp();
-    Serial.println("Time synced from NTP");
+    if (home_ui_sync_time_from_ntp()) {
+      Serial.println("Time synced from NTP");
+    } else {
+      Serial.println("NTP not ready yet — will retry");
+    }
   } else {
-    Serial.println("WiFi failed — clock waits for NTP");
+    home_ui_sync_time_from_ntp();
+    Serial.println("WiFi failed — clock will sync once WiFi is up");
   }
   home_ui_set_status("");
 

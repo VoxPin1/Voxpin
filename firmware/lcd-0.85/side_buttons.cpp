@@ -80,7 +80,7 @@ static bool post_event(const char *path, const char *ok_status)
 {
   if (WiFi.status() != WL_CONNECTED) {
     set_status("Connecting", 0);
-    if (!wifi_wait_connected(10000)) {
+    if (!wifi_wait_connected(30000)) {
       set_status("No WiFi", 2500);
       return false;
     }

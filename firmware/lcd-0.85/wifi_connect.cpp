@@ -168,7 +168,13 @@ static bool probe_health(const char *host, int port, const char *scheme,
 
   HTTPClient http;
   const bool tls_mode = strcmp(scheme, "https") == 0;
+<<<<<<< Updated upstream
   http.setTimeout(timeout_ms ? timeout_ms : (tls_mode ? 6000 : 1500));
+=======
+  // Generous limits: busy venue Wi-Fi can take seconds per round trip.
+  http.setConnectTimeout(tls_mode ? 15000 : 6000);
+  http.setTimeout(tls_mode ? 15000 : 6000);
+>>>>>>> Stashed changes
   int code = -1;
   if (tls_mode) {
     WiFiClientSecure tls;
@@ -223,6 +229,7 @@ static bool parse_beacon(const char *msg, char *host, size_t host_len, int *port
   return true;
 }
 
+<<<<<<< Updated upstream
 // Boot always installs 172.20.10.5. A helper learned earlier (including the old
 // 192.0.0.2 default) must not survive in NVS or in RAM.
 static void overwrite_saved_helper(void)
@@ -259,6 +266,41 @@ static void forget_stale_helper(void)
   }
   Serial.printf("Drop stale helper %s\n", g_backend_host);
   backend_set_target(BACKEND_HOST, BACKEND_PORT, BACKEND_SCHEME);
+=======
+// Phone hotspots (an iPhone hands out 172.20.10.1-14) don't forward the
+// helper's broadcast beacon, so on a small network try every address.
+static bool sweep_small_subnet(void)
+{
+  const IPAddress me = WiFi.localIP();
+  const IPAddress mask = WiFi.subnetMask();
+  const uint32_t me32 = ((uint32_t)me[0] << 24) | ((uint32_t)me[1] << 16) | ((uint32_t)me[2] << 8) | me[3];
+  const uint32_t mask32 = ((uint32_t)mask[0] << 24) | ((uint32_t)mask[1] << 16) | ((uint32_t)mask[2] << 8) | mask[3];
+  const uint32_t hosts = ~mask32;
+  if (me32 == 0 || hosts == 0 || hosts > 32) {
+    return false;
+  }
+  const uint32_t net = me32 & mask32;
+  for (uint32_t h = 1; h < hosts; h++) {
+    const uint32_t ip = net | h;
+    if (ip == me32) {
+      continue;
+    }
+    char host[16];
+    snprintf(host, sizeof(host), "%u.%u.%u.%u",
+             (unsigned)(ip >> 24), (unsigned)((ip >> 16) & 0xff), (unsigned)((ip >> 8) & 0xff), (unsigned)(ip & 0xff));
+    WiFiClient probe;
+    if (!probe.connect(host, 8765, 400)) {
+      continue;
+    }
+    probe.stop();
+    if (probe_health(host, 8765)) {
+      backend_set_target(host, 8765, "http");
+      Serial.printf("Helper via subnet sweep %s:8765\n", host);
+      return true;
+    }
+  }
+  return false;
+>>>>>>> Stashed changes
 }
 
 bool backend_discover(uint32_t timeout_ms)
@@ -326,7 +368,14 @@ bool backend_discover(uint32_t timeout_ms)
     backend_set_target(gw_text, 8765, "http");
     return true;
   }
+<<<<<<< Updated upstream
   if (discover_helper_v6()) {
+=======
+  if (sweep_small_subnet()) {
+    return true;
+  }
+  if (backend_fallback_cloud()) {
+>>>>>>> Stashed changes
     return true;
   }
 
@@ -503,7 +552,7 @@ static void wifi_wake_task(void *arg)
   if (WiFi.status() == WL_CONNECTED) {
     forget_stale_helper();
     if (!probe_health(g_backend_host, g_backend_port, g_backend_scheme)) {
-      backend_discover(1200);
+      backend_discover(4000);
     }
   }
   wifi_wake_running = false;
@@ -546,7 +595,7 @@ bool wifi_quick_join(uint32_t timeout_ms)
   }
   forget_stale_helper();
   if (!probe_health(g_backend_host, g_backend_port, g_backend_scheme)) {
-    backend_discover(1200);
+    backend_discover(4000);
   }
   return WiFi.status() == WL_CONNECTED;
 }

@@ -2155,6 +2155,9 @@ def note():
         # Always STT in English so Language-tab picks don't break recognition.
         source = "en"
         wav_bytes = pcm_to_wav(pcm, sample_rate, channels, sample_width)
+        # The pin may upload at a lower rate than it plays back; spoken replies
+        # below use the playback rate.
+        sample_rate = int(request.headers.get("X-Reply-Rate", sample_rate))
         stats = pcm_stats(pcm, sample_width)
         t_stt = datetime.now(timezone.utc)
         transcript = transcribe(wav_bytes, language=source).strip()

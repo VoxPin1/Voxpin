@@ -54,6 +54,7 @@ inline bool backend_http_begin(HTTPClient &http, WiFiClientSecure &tls, WiFiClie
 {
   char url[160];
   backend_make_url(url, sizeof(url), path);
+  http.setConnectTimeout(15000);
   if (strcmp(g_backend_scheme, "https") == 0) {
     tls.setInsecure();
     return http.begin(tls, url);

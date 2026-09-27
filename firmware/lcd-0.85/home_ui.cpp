@@ -36,6 +36,9 @@ static char last_event_text[96] = "";
 static uint32_t last_event_fetch_ms = 0;
 static uint32_t status_clear_at = 0;
 static volatile bool ui_paused = false;
+static uint32_t last_ntp_try_ms = 0;
+static bool ntp_ever_tried = false;
+static bool clock_set = false;
 
 static bool ui_lock(int timeout_ms)
 {
@@ -213,10 +216,44 @@ static void lvgl_task(void *arg)
   }
 }
 
+static bool clock_is_set(void)
+{
+  struct tm timeinfo {};
+  return getLocalTime(&timeinfo, 10);
+}
+
+// Starts the background SNTP client; it doesn't block.
+static void start_ntp(void)
+{
+  configTzTime("PST8PDT", "pool.ntp.org");
+  last_ntp_try_ms = millis();
+  ntp_ever_tried = true;
+}
+
+// Boot may have had no Wi-Fi, so keep retrying NTP until the clock is set.
+static void retry_ntp_if_needed(void)
+{
+  if (clock_set) {
+    return;
+  }
+  if (clock_is_set()) {
+    clock_set = true;
+    Serial.println("NTP: clock set");
+    return;
+  }
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+  if (!ntp_ever_tried || (millis() - last_ntp_try_ms) >= 30000) {
+    start_ntp();
+  }
+}
+
 static void home_update_task(void *arg)
 {
   (void)arg;
   for (;;) {
+    retry_ntp_if_needed();
     if (ui_lock(-1)) {
       update_home_labels();
       ui_unlock();
@@ -225,18 +262,23 @@ static void home_update_task(void *arg)
   }
 }
 
-void home_ui_sync_time_from_ntp(void)
+bool home_ui_sync_time_from_ntp(void)
 {
   if (WiFi.status() != WL_CONNECTED) {
-    return;
+    // Set the zone now; home_update_task starts NTP once Wi-Fi is up.
+    setenv("TZ", "PST8PDT", 1);
+    tzset();
+    return false;
   }
-  configTzTime("PST8PDT", "pool.ntp.org");
+  start_ntp();
   struct tm timeinfo {};
   for (int i = 0; i < 20; i++) {
     if (getLocalTime(&timeinfo, 1000)) {
-      return;
+      clock_set = true;
+      return true;
     }
   }
+  return false;
 }
 
 void home_ui_set_status(const char *text)
