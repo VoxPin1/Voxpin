@@ -168,13 +168,7 @@ static bool probe_health(const char *host, int port, const char *scheme,
 
   HTTPClient http;
   const bool tls_mode = strcmp(scheme, "https") == 0;
-<<<<<<< Updated upstream
   http.setTimeout(timeout_ms ? timeout_ms : (tls_mode ? 6000 : 1500));
-=======
-  // Generous limits: busy venue Wi-Fi can take seconds per round trip.
-  http.setConnectTimeout(tls_mode ? 15000 : 6000);
-  http.setTimeout(tls_mode ? 15000 : 6000);
->>>>>>> Stashed changes
   int code = -1;
   if (tls_mode) {
     WiFiClientSecure tls;
@@ -229,7 +223,6 @@ static bool parse_beacon(const char *msg, char *host, size_t host_len, int *port
   return true;
 }
 
-<<<<<<< Updated upstream
 // Boot always installs 172.20.10.5. A helper learned earlier (including the old
 // 192.0.0.2 default) must not survive in NVS or in RAM.
 static void overwrite_saved_helper(void)
@@ -266,7 +259,8 @@ static void forget_stale_helper(void)
   }
   Serial.printf("Drop stale helper %s\n", g_backend_host);
   backend_set_target(BACKEND_HOST, BACKEND_PORT, BACKEND_SCHEME);
-=======
+}
+
 // Phone hotspots (an iPhone hands out 172.20.10.1-14) don't forward the
 // helper's broadcast beacon, so on a small network try every address.
 static bool sweep_small_subnet(void)
@@ -300,7 +294,6 @@ static bool sweep_small_subnet(void)
     }
   }
   return false;
->>>>>>> Stashed changes
 }
 
 bool backend_discover(uint32_t timeout_ms)
@@ -368,14 +361,10 @@ bool backend_discover(uint32_t timeout_ms)
     backend_set_target(gw_text, 8765, "http");
     return true;
   }
-<<<<<<< Updated upstream
-  if (discover_helper_v6()) {
-=======
   if (sweep_small_subnet()) {
     return true;
   }
-  if (backend_fallback_cloud()) {
->>>>>>> Stashed changes
+  if (discover_helper_v6()) {
     return true;
   }
 
