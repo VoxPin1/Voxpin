@@ -14,7 +14,7 @@ Keep the Mac on, awake, and on the same 2.4 GHz Wi‑Fi as the pin.
 
 ## Change Wi-Fi without a computer
 
-1. Hold **+** while you turn the pin on (keep holding until the screen says **Join VoxPin-Setup**). The pin also opens this hotspot by itself when it can't join any Wi-Fi it knows.
+1. Hold **+** for 5 seconds, awake or asleep. The screen shows **Hold for WiFi**, then **Join VoxPin-Setup**. Let go before 5 seconds and + sends SOS as usual. Holding + while the pin starts up (for example when it's plugged into USB) also works, and the pin opens this hotspot by itself when it can't join any Wi-Fi it knows.
 2. On your phone, join the Wi-Fi network **VoxPin-Setup**. A setup page opens; if it doesn't, open any web page.
 3. Pick your Wi-Fi (or type its name), enter the password, and tap **Connect**.
 4. The pin shows **Joining**, then **WiFi saved** and switches to that network. **Wrong pass?** means rejoin VoxPin-Setup and try again.

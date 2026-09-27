@@ -15,6 +15,7 @@
 #include "freertos/task.h"
 #include "idle.h"
 #include "wifi_connect.h"
+#include "wifi_setup.h"
 
 static const char *TAG = "side_btn";
 static void (*status_cb)(const char *text) = NULL;
@@ -35,13 +36,34 @@ static bool plus_pressed(void)
   return gpio_get_level(PLUS_BUTTON_PIN) == 0;
 }
 
-static void wait_release(void)
+static constexpr uint32_t kHintHoldMs = 2000;
+static constexpr uint32_t kSetupHoldMs = 5000;
+
+// Returns true when + was held long enough to mean Wi-Fi setup, not SOS.
+static bool wait_release(void)
 {
   const uint32_t started = millis();
-  while (plus_pressed() && (millis() - started) < 2500) {
+  bool hinted = false;
+  while (plus_pressed()) {
+    const uint32_t held = millis() - started;
+    if (held >= kSetupHoldMs) {
+      set_status("WiFi setup", 0);
+      while (plus_pressed()) {
+        vTaskDelay(pdMS_TO_TICKS(20));
+      }
+      return true;
+    }
+    if (!hinted && held >= kHintHoldMs) {
+      hinted = true;
+      set_status("Hold for WiFi", 0);
+    }
     vTaskDelay(pdMS_TO_TICKS(20));
   }
   vTaskDelay(pdMS_TO_TICKS(40));
+  if (hinted) {
+    set_status("Sending help", 0);
+  }
+  return false;
 }
 
 static int scan_wifi_json(char *out, size_t out_len)
@@ -141,12 +163,22 @@ static void side_buttons_task(void *arg)
     while (!plus_pressed()) {
       vTaskDelay(pdMS_TO_TICKS(20));
     }
-    set_status("Sending help", 0);
-    wait_release();
+    if (wifi_setup_active()) {
+      vTaskDelay(pdMS_TO_TICKS(200));
+      continue;
+    }
     idle_touch();
+    // The sleeping screen is paused, so wake first or the hold hint won't show.
     if (idle_is_sleeping()) {
-      set_status("Waking", 0);
       idle_wake_sync();
+    }
+    set_status("Sending help", 0);
+    if (wait_release()) {
+      wifi_setup_request();
+      while (wifi_setup_active()) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+      }
+      continue;
     }
     post_event("/sos", "Help sent");
   }

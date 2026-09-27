@@ -18,6 +18,7 @@
 #include "freertos/task.h"
 #include "idle.h"
 #include "voice_note.h"
+#include "wifi_setup.h"
 
 char g_backend_host[64] = BACKEND_HOST;
 int g_backend_port = BACKEND_PORT;
@@ -600,7 +601,7 @@ static void wifi_wake_task(void *arg)
   while (WiFi.status() != WL_CONNECTED && (millis() - start) < 8000) {
     vTaskDelay(pdMS_TO_TICKS(40));
   }
-  if (WiFi.status() != WL_CONNECTED && !idle_is_sleeping()) {
+  if (WiFi.status() != WL_CONNECTED && !idle_is_sleeping() && !wifi_setup_active()) {
     join_known_networks(0);
   }
   if (WiFi.status() == WL_CONNECTED) {
@@ -615,7 +616,7 @@ static void wifi_wake_task(void *arg)
 
 void wifi_wake_start(void)
 {
-  if (WiFi.status() == WL_CONNECTED || wifi_wake_running) {
+  if (WiFi.status() == WL_CONNECTED || wifi_wake_running || wifi_setup_active()) {
     return;
   }
   wifi_wake_running = true;
@@ -634,6 +635,9 @@ bool wifi_quick_join(uint32_t timeout_ms)
   }
   if (WiFi.status() == WL_CONNECTED) {
     return true;
+  }
+  if (wifi_setup_active()) {
+    return false;
   }
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
@@ -711,7 +715,7 @@ void wifi_maintain(void)
   static uint32_t last_keepalive = 0;
   static int keepalive_fails = 0;
 
-  if (wifi_wake_running) {
+  if (wifi_wake_running || wifi_setup_active()) {
     return;
   }
   const uint32_t now = millis();

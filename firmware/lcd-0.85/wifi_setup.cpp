@@ -7,6 +7,7 @@
 
 #include "board_pins.h"
 #include "driver/gpio.h"
+#include "idle.h"
 #include "power.h"
 #include "wifi_connect.h"
 
@@ -22,6 +23,8 @@ static String message;
 static String pending_ssid;
 static String pending_password;
 static bool pending = false;
+static volatile bool setup_busy = false;
+static volatile bool setup_wanted = false;
 
 static void input_pullup(gpio_num_t pin)
 {
@@ -174,6 +177,7 @@ static void serve(void)
 
 bool wifi_setup_run(void (*status)(const char *text))
 {
+  setup_busy = true;
   input_pullup(PWR_BUTTON_PIN);
   WiFi.disconnect(true, false);
   delay(200);
@@ -199,6 +203,7 @@ bool wifi_setup_run(void (*status)(const char *text))
   uint32_t last_client = millis();
   for (;;) {
     serve();
+    idle_touch();
     if (WiFi.softAPgetStationNum() > 0) {
       last_client = millis();
     }
@@ -256,5 +261,33 @@ bool wifi_setup_run(void (*status)(const char *text))
   dns.stop();
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_STA);
+  setup_busy = false;
   return joined;
+}
+
+void wifi_setup_request(void)
+{
+  setup_wanted = true;
+}
+
+bool wifi_setup_active(void)
+{
+  return setup_wanted || setup_busy;
+}
+
+void wifi_setup_poll(void (*status)(const char *text))
+{
+  if (!setup_wanted) {
+    return;
+  }
+  Serial.println("+ held: Wi-Fi setup");
+  idle_wake_sync();
+  wifi_setup_run(status);
+  status("Connecting");
+  while (!wifi_connect_begin(45000)) {
+    wifi_setup_run(status);
+    status("Connecting");
+  }
+  status("");
+  setup_wanted = false;
 }

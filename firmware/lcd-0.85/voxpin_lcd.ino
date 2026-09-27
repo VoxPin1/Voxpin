@@ -58,6 +58,7 @@ void setup()
 
 void loop()
 {
+  wifi_setup_poll(home_ui_set_status);
   wifi_maintain();
   delay(100);
 }
