@@ -12,3 +12,5 @@ bool wifi_wait_connected(uint32_t timeout_ms);
 void wifi_set_fast(bool fast);
 bool wifi_quick_join(uint32_t timeout_ms);
 void wifi_maintain(void);
+// Saves a network from the setup page; boot tries it before the built-in hotspot.
+void wifi_save_network(const String &ssid, const String &password);

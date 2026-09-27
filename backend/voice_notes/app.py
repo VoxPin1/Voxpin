@@ -1602,8 +1602,10 @@ def append_to_doc_later(
     text: str, document_id: str | None = None, kind: str = "note"
 ) -> None:
     def _run() -> None:
+        started = time.monotonic()
         try:
             append_to_doc(text, document_id=document_id, kind=kind)
+            print(f"docs: {kind} written in {time.monotonic() - started:.2f}s", flush=True)
         except Exception as err:
             print(f"note saved locally only (Docs error): {err}", flush=True)
 
@@ -2135,7 +2137,9 @@ def api_alerts():
 
 @app.post("/note")
 def note():
+    t_upload = time.monotonic()
     pcm = request.get_data(cache=False)
+    upload_s = time.monotonic() - t_upload
     if not pcm:
         print(
             f"empty audio from {request.remote_addr} "
@@ -2147,6 +2151,10 @@ def note():
     sample_rate = int(request.headers.get("X-Sample-Rate", "16000"))
     channels = int(request.headers.get("X-Channels", "2"))
     bits = int(request.headers.get("X-Bits", "16"))
+    upload_bytes = len(pcm)
+    if request.headers.get("X-Encoding", "").lower() == "ima-adpcm":
+        pcm, _ = audioop.adpcm2lin(pcm, 2, None)
+        bits = 16
     sample_width = max(1, bits // 8)
 
     try:
@@ -2164,7 +2172,8 @@ def note():
         stt_s = (datetime.now(timezone.utc) - t_stt).total_seconds()
         print(
             f"clip: {len(pcm)}B -> wav {len(wav_bytes)}B ch={channels} "
-            f"rms={stats['rms']} peak={stats['peak']} stt={stt_s:.2f}s",
+            f"rms={stats['rms']} peak={stats['peak']} "
+            f"upload={upload_bytes}B in {upload_s:.2f}s stt={stt_s:.2f}s",
             flush=True,
         )
         action, text = parse_command(transcript)

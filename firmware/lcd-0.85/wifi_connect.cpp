@@ -17,6 +17,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "idle.h"
+#include "voice_note.h"
 
 char g_backend_host[64] = BACKEND_HOST;
 int g_backend_port = BACKEND_PORT;
@@ -29,14 +30,20 @@ char g_backend_scheme[8] = BACKEND_SCHEME;
 
 static const uint16_t kBeaconPort = 8766;
 
-// The iPhone hotspot is joined with a fixed address so the pin does not wait on
-// its DHCP. Every other network uses DHCP.
-static const IPAddress kHotspotIp(172, 20, 10, 2);
+// Fixed address on the iPhone hotspot. The phone's DHCP hands out from .2 up,
+// and an older pin squats on .2 without a lease, so DHCP gave both pins .2.
+// .12 sits near the top of the /28 where the phone rarely reaches.
+static const IPAddress kHotspotIp(172, 20, 10, 12);
 static const IPAddress kHotspotGateway(172, 20, 10, 1);
 static const IPAddress kHotspotSubnet(255, 255, 255, 240);
 static const IPAddress kHotspotDns(172, 20, 10, 1);
 static const uint32_t kHotspotJoinMs = 20000;
 static const int kHotspotAttempts = 3;
+
+static void use_dhcp(void)
+{
+  WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+}
 
 static void use_hotspot_address(void)
 {
@@ -45,9 +52,38 @@ static void use_hotspot_address(void)
   }
 }
 
-static void use_dhcp(void)
+// Network saved from the VoxPin-Setup page. Tried before the built-in hotspot
+// and joined with DHCP, since its subnet is unknown.
+static String saved_ssid;
+static String saved_password;
+static bool saved_loaded = false;
+static bool on_saved_network = false;
+
+static void load_saved_network(void)
 {
-  WiFi.config(INADDR_NONE, INADDR_NONE, INADDR_NONE);
+  if (saved_loaded) {
+    return;
+  }
+  saved_loaded = true;
+  Preferences prefs;
+  if (prefs.begin("voxpin", true)) {
+    saved_ssid = prefs.getString("wifi_ssid", "");
+    saved_password = prefs.getString("wifi_pass", "");
+    prefs.end();
+  }
+}
+
+void wifi_save_network(const String &ssid, const String &password)
+{
+  Preferences prefs;
+  if (prefs.begin("voxpin", false)) {
+    prefs.putString("wifi_ssid", ssid);
+    prefs.putString("wifi_pass", password);
+    prefs.end();
+  }
+  saved_ssid = ssid;
+  saved_password = password;
+  saved_loaded = true;
 }
 
 // Power save makes the iPhone drop the pin and stops it answering ping.
@@ -344,7 +380,6 @@ bool backend_discover(uint32_t timeout_ms)
     BACKEND_HOST,
     "192.168.68.56",
     "192.168.68.85",
-    "172.20.10.2",
     "172.20.10.5",
   };
   IPAddress gw = WiFi.gatewayIP();
@@ -428,11 +463,23 @@ void backend_set_target(const char *host, int port, const char *scheme)
   }
 }
 
+// Picking the built-in hotspot on the setup page only updates its password;
+// it keeps the fixed address so it can't clash with another pin.
+static bool saved_is_hotspot(void)
+{
+  return saved_ssid.length() > 0 && ssid_match(saved_ssid, WIFI_SSID_2);
+}
+
+static const char *hotspot_password(void)
+{
+  return saved_is_hotspot() ? saved_password.c_str() : WIFI_PASSWORD_2;
+}
+
 // Joined by name even when the scan misses it: an iPhone hotspot often stops
 // advertising until a client probes for it.
 static bool join_hotspot(void)
 {
-  if (WIFI_SSID_2[0] == '\0' || WIFI_PASSWORD_2[0] == '\0') {
+  if (WIFI_SSID_2[0] == '\0' || hotspot_password()[0] == '\0') {
     return false;
   }
   for (int attempt = 1; attempt <= kHotspotAttempts; attempt++) {
@@ -440,7 +487,7 @@ static bool join_hotspot(void)
     use_hotspot_address();
     Serial.printf("WiFi joining '%s' at %s (attempt %d/%d)\n", WIFI_SSID_2,
                   kHotspotIp.toString().c_str(), attempt, kHotspotAttempts);
-    WiFi.begin(WIFI_SSID_2, WIFI_PASSWORD_2);
+    WiFi.begin(WIFI_SSID_2, hotspot_password());
     const uint32_t start = millis();
     while (WiFi.status() != WL_CONNECTED && (millis() - start) < kHotspotJoinMs) {
       delay(250);
@@ -457,8 +504,8 @@ static bool join_hotspot(void)
   return false;
 }
 
-// With a hotspot configured the pin joins nothing else; wifi_maintain() keeps
-// retrying it. Home Wi-Fi is used only when no hotspot is set.
+// The network saved from the setup page comes first, then the built-in
+// hotspot. Home Wi-Fi is used only when no hotspot is compiled in.
 static bool join_known_networks(uint32_t timeout_ms)
 {
   (void)timeout_ms;
@@ -470,17 +517,35 @@ static bool join_known_networks(uint32_t timeout_ms)
   watch_disconnects();
   wifi_idle();
 
+  load_saved_network();
+  on_saved_network = false;
+  if (saved_ssid.length() > 0 && !saved_is_hotspot() &&
+      try_join(saved_ssid.c_str(), saved_password.c_str(), 18000)) {
+    on_saved_network = true;
+    return true;
+  }
   if (WIFI_SSID_2[0] != '\0') {
     return join_hotspot();
   }
   return try_join(WIFI_SSID, WIFI_PASSWORD, 18000);
 }
 
+static const char *current_ssid(void)
+{
+  if (on_saved_network) {
+    return saved_ssid.c_str();
+  }
+  return WIFI_SSID_2[0] != '\0' ? WIFI_SSID_2 : WIFI_SSID;
+}
+
 static void begin_configured_network(void)
 {
-  if (WIFI_SSID_2[0] != '\0') {
+  if (on_saved_network) {
+    use_dhcp();
+    WiFi.begin(saved_ssid.c_str(), saved_password.c_str());
+  } else if (WIFI_SSID_2[0] != '\0') {
     use_hotspot_address();
-    WiFi.begin(WIFI_SSID_2, WIFI_PASSWORD_2);
+    WiFi.begin(WIFI_SSID_2, hotspot_password());
   } else {
     use_dhcp();
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -610,8 +675,11 @@ static const uint32_t kKeepaliveMs = 10000;
 // Auto-reconnect gets this long before a manual rejoin, so the two don't collide.
 static const uint32_t kReconnectGraceMs = 8000;
 static const uint32_t kReconnectEveryMs = 20000;
+// "Connected" but the helper has not answered for this long: the link is dead
+// even if the driver has not noticed, so tear it down and rejoin.
+static const int kKeepaliveFailLimit = 12;
 
-static void send_keepalive(void)
+static bool send_keepalive(void)
 {
   char url[160];
   backend_make_url(url, sizeof(url), "/health");
@@ -622,16 +690,17 @@ static void send_keepalive(void)
   http.setTimeout(2000);
   if (!backend_http_begin(http, tls, plain, "/health")) {
     Serial.printf("keepalive %s -> begin failed\n", url);
-    return;
+    return false;
   }
   const int code = http.GET();
   http.end();
   if (code > 0) {
     Serial.printf("keepalive %s -> HTTP %d\n", url, code);
-  } else {
-    Serial.printf("keepalive %s -> error %d (%s)\n", url, code,
-                  HTTPClient::errorToString(code).c_str());
+    return true;
   }
+  Serial.printf("keepalive %s -> error %d (%s)\n", url, code,
+                HTTPClient::errorToString(code).c_str());
+  return false;
 }
 
 void wifi_maintain(void)
@@ -640,6 +709,7 @@ void wifi_maintain(void)
   static uint32_t down_since = 0;
   static uint32_t last_attempt = 0;
   static uint32_t last_keepalive = 0;
+  static int keepalive_fails = 0;
 
   if (wifi_wake_running) {
     return;
@@ -648,9 +718,8 @@ void wifi_maintain(void)
   if (WiFi.status() == WL_CONNECTED) {
     if (!was_connected) {
       was_connected = true;
-      if (ssid_match(WiFi.SSID(), WIFI_SSID_2)) {
-        on_hotspot_up();
-      }
+      keepalive_fails = 0;
+      on_hotspot_up();
       print_link();
       // Boot only syncs the clock if Wi-Fi was up during setup().
       struct tm timeinfo {};
@@ -661,25 +730,37 @@ void wifi_maintain(void)
     }
     if (now - last_keepalive >= kKeepaliveMs) {
       last_keepalive = now;
-      send_keepalive();
+      keepalive_fails = send_keepalive() ? 0 : keepalive_fails + 1;
+      // On DHCP networks the Mac's address can change; look for its beacon.
+      if (keepalive_fails == 3 && !voice_note_is_busy()) {
+        backend_discover(2000);
+      }
     }
-    return;
+    if (keepalive_fails < kKeepaliveFailLimit || voice_note_is_busy()) {
+      return;
+    }
+    Serial.printf("Helper silent for %us; rejoining Wi-Fi\n",
+                  (unsigned)(kKeepaliveFailLimit * kKeepaliveMs / 1000));
+    keepalive_fails = 0;
+    wifi_idle();
   }
 
   if (was_connected || down_since == 0) {
     was_connected = false;
     down_since = now;
   }
-  if (WIFI_SSID_2[0] == '\0' || now - down_since < kReconnectGraceMs ||
+  if ((!on_saved_network && WIFI_SSID_2[0] == '\0') || now - down_since < kReconnectGraceMs ||
       (last_attempt != 0 && now - last_attempt < kReconnectEveryMs)) {
     return;
   }
   last_attempt = now;
-  Serial.printf("WiFi reconnecting to '%s' at %s\n", WIFI_SSID_2,
-                kHotspotIp.toString().c_str());
-  WiFi.disconnect(false, false);
-  use_hotspot_address();
-  WiFi.begin(WIFI_SSID_2, WIFI_PASSWORD_2);
+  Serial.printf("WiFi reconnecting to '%s' (status=%d)\n", current_ssid(),
+                (int)WiFi.status());
+  // Reset the radio the way boot does; boot joins reliably.
+  wifi_idle();
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  begin_configured_network();
 }
 
 // After idle sleep the radio is off and wifi_wake_task reconnects in the

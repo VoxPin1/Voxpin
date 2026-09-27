@@ -231,5 +231,5 @@ else
   echo "Pin USB: not plugged in (ok if it is on battery)"
 fi
 echo
-echo "Ready. The pin joins only '${SSID}' at 172.20.10.2 and calls http://${HOST}:8765."
+echo "Ready. The pin joins only '${SSID}' at 172.20.10.12 and calls http://${HOST}:8765."
 echo "Keep this Mac on the hotspot and leave the helper running."

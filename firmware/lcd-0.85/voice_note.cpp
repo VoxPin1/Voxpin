@@ -107,6 +107,78 @@ static uint32_t trim_pcm16(uint8_t *data, uint32_t len)
   return out_n * 2;
 }
 
+// IMA ADPCM, bit-for-bit what Python's audioop.adpcm2lin decodes: state starts
+// at 0/0 and the first sample of each pair goes in the high nibble. Encodes in
+// place and returns the new length. A quarter of the bytes matters because the
+// ESP32's 5.7 KB TCP window caps hotspot uploads near 5 KB/s.
+static uint32_t pcm16_to_ima_adpcm(uint8_t *data, uint32_t len)
+{
+  static const int8_t kIndexTable[16] = {
+    -1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8,
+  };
+  static const int16_t kStepTable[89] = {
+    7,     8,     9,     10,    11,    12,    13,    14,    16,    17,
+    19,    21,    23,    25,    28,    31,    34,    37,    41,    45,
+    50,    55,    60,    66,    73,    80,    88,    97,    107,   118,
+    130,   143,   157,   173,   190,   209,   230,   253,   279,   307,
+    337,   371,   408,   449,   494,   544,   598,   658,   724,   796,
+    876,   963,   1060,  1166,  1282,  1411,  1552,  1707,  1878,  2066,
+    2272,  2499,  2749,  3024,  3327,  3660,  4026,  4428,  4871,  5358,
+    5894,  6484,  7132,  7845,  8630,  9493,  10442, 11487, 12635, 13899,
+    15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767,
+  };
+  const int16_t *in = (const int16_t *)data;
+  const uint32_t count = (len / 2) & ~1u;
+  int valpred = 0;
+  int index = 0;
+  uint8_t high = 0;
+  for (uint32_t i = 0; i < count; i++) {
+    int step = kStepTable[index];
+    int diff = in[i] - valpred;
+    const int sign = diff < 0 ? 8 : 0;
+    if (sign) {
+      diff = -diff;
+    }
+    int delta = 0;
+    int vpdiff = step >> 3;
+    if (diff >= step) {
+      delta = 4;
+      diff -= step;
+      vpdiff += step;
+    }
+    step >>= 1;
+    if (diff >= step) {
+      delta |= 2;
+      diff -= step;
+      vpdiff += step;
+    }
+    step >>= 1;
+    if (diff >= step) {
+      delta |= 1;
+      vpdiff += step;
+    }
+    valpred += sign ? -vpdiff : vpdiff;
+    if (valpred > 32767) {
+      valpred = 32767;
+    } else if (valpred < -32768) {
+      valpred = -32768;
+    }
+    delta |= sign;
+    index += kIndexTable[delta];
+    if (index < 0) {
+      index = 0;
+    } else if (index > 88) {
+      index = 88;
+    }
+    if ((i & 1) == 0) {
+      high = (uint8_t)(delta << 4);
+    } else {
+      data[i >> 1] = high | (uint8_t)delta;
+    }
+  }
+  return count / 2;
+}
+
 static void set_status(const char *text)
 {
   if (status_cb != NULL) {
@@ -211,6 +283,7 @@ static uint32_t downsample_half(uint8_t *data, uint32_t len)
 static bool handle_clip_inner(uint8_t *data, uint32_t len)
 {
   len = downsample_half(data, len);
+  len = pcm16_to_ima_adpcm(data, len);
 
   if (WiFi.status() != WL_CONNECTED) {
     show_status("Connecting", 0);
@@ -243,6 +316,7 @@ static bool handle_clip_inner(uint8_t *data, uint32_t len)
     http.addHeader("X-Reply-Rate", String(kSampleRate));
     http.addHeader("X-Channels", "1");
     http.addHeader("X-Bits", "16");
+    http.addHeader("X-Encoding", "ima-adpcm");
     const char *header_keys[] = {"X-Action", "X-Status", "X-Channels"};
     http.collectHeaders(header_keys, 3);
 

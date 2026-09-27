@@ -19,7 +19,7 @@ Run this instead of walking through Wi-Fi steps by hand.
 Both sides are pinned so they always meet at the same IP:
 
 - Mac: `172.20.10.5` (`BACKEND_HOST` in `backend_config.h`). `venue.sh` sets this with "Manually using DHCP router".
-- Pin: `172.20.10.2`, and it calls `http://172.20.10.5:8765`.
+- Pin: `172.20.10.12`, and it calls `http://172.20.10.5:8765`. An older pin on the same hotspot sits on `.2`, so this pin stays off it.
 
 ## If join fails
 

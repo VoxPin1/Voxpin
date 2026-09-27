@@ -1,4 +1,5 @@
 #include "wifi_connect.h"
+#include "wifi_setup.h"
 #include "home_ui.h"
 #include "power.h"
 #include "ble_companion.h"
@@ -23,17 +24,25 @@ void setup()
   home_ui_begin();
   home_ui_set_status("Connecting");
 
-  if (wifi_connect_begin(45000)) {
-    Serial.print("WiFi connected, IP: ");
-    Serial.println(wifi_connect_ip());
-    if (home_ui_sync_time_from_ntp()) {
-      Serial.println("Time synced from NTP");
-    } else {
-      Serial.println("NTP not ready yet — will retry");
-    }
+  // Hold + at power-on to pick a new Wi-Fi. Otherwise the setup hotspot opens
+  // only when no known network joins, and known networks are retried after it.
+  bool online = false;
+  if (wifi_setup_requested()) {
+    Serial.println("+ held at boot: Wi-Fi setup");
   } else {
-    home_ui_sync_time_from_ntp();
-    Serial.println("WiFi failed — clock will sync once WiFi is up");
+    online = wifi_connect_begin(45000);
+  }
+  while (!online) {
+    wifi_setup_run(home_ui_set_status);
+    home_ui_set_status("Connecting");
+    online = wifi_connect_begin(45000);
+  }
+  Serial.print("WiFi connected, IP: ");
+  Serial.println(wifi_connect_ip());
+  if (home_ui_sync_time_from_ntp()) {
+    Serial.println("Time synced from NTP");
+  } else {
+    Serial.println("NTP not ready yet — will retry");
   }
   home_ui_set_status("");
 

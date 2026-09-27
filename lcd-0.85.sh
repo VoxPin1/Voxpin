@@ -41,6 +41,8 @@ sync_sketch() {
   cp "${SRC}/side_buttons.cpp" "$SKETCH/"
   cp "${SRC}/wifi_connect.h" "$SKETCH/"
   cp "${SRC}/wifi_connect.cpp" "$SKETCH/"
+  cp "${SRC}/wifi_setup.h" "$SKETCH/"
+  cp "${SRC}/wifi_setup.cpp" "$SKETCH/"
   cp "${SRC}/backend_http.h" "$SKETCH/"
   cp "${SRC}/ble_companion.h" "$SKETCH/"
   cp "${SRC}/ble_companion.cpp" "$SKETCH/"
