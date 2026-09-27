@@ -27,11 +27,6 @@ char g_backend_scheme[8] = BACKEND_SCHEME;
 #define WIFI_PASSWORD_2 ""
 #endif
 
-#ifndef WIFI_SSID_3
-#define WIFI_SSID_3 ""
-#define WIFI_PASSWORD_3 ""
-#endif
-
 static const uint16_t kBeaconPort = 8766;
 
 // The iPhone hotspot is joined with a fixed address so the pin does not wait on
@@ -112,16 +107,6 @@ static bool ssid_match(const String &seen, const char *want)
   return fold_ssid(seen) == fold_ssid(String(want));
 }
 
-static String scanned_ssid(int n, const char *want)
-{
-  for (int i = 0; i < n; i++) {
-    if (ssid_match(WiFi.SSID(i), want)) {
-      return WiFi.SSID(i);
-    }
-  }
-  return String();
-}
-
 static void wifi_idle(void)
 {
   WiFi.disconnect(true, false);
@@ -132,84 +117,9 @@ static void wifi_idle(void)
   delay(250);
 }
 
-struct ScannedAp {
-  int32_t rssi;
-  int32_t channel;
-  uint8_t bssid[6];
-};
-
-static int collect_aps(int n, const char *ssid, ScannedAp *out, int max_out)
-{
-  int count = 0;
-  for (int i = 0; i < n && count < max_out; i++) {
-    if (!ssid_match(WiFi.SSID(i), ssid)) {
-      continue;
-    }
-    const uint8_t *bssid = WiFi.BSSID(i);
-    if (bssid == NULL) {
-      continue;
-    }
-    out[count].rssi = WiFi.RSSI(i);
-    out[count].channel = WiFi.channel(i);
-    memcpy(out[count].bssid, bssid, 6);
-    count++;
-  }
-  for (int a = 0; a < count; a++) {
-    for (int b = a + 1; b < count; b++) {
-      if (out[b].rssi > out[a].rssi) {
-        ScannedAp tmp = out[a];
-        out[a] = out[b];
-        out[b] = tmp;
-      }
-    }
-  }
-  return count;
-}
-
 static bool probe_health(const char *host, int port, const char *scheme = "http",
                          uint32_t timeout_ms = 0);
 static bool discover_helper_v6(void);
-
-static bool wait_for_ip(uint32_t timeout_ms)
-{
-  const uint32_t start = millis();
-  while ((millis() - start) < timeout_ms) {
-    if (WiFi.status() == WL_CONNECTED && (uint32_t)WiFi.localIP() != 0) {
-      return true;
-    }
-    delay(200);
-  }
-  return false;
-}
-
-// Stay on the first access point that hands out an address. Probing /health
-// before DHCP finishes looks like a failure and used to roam the pin off a
-// working Makers AP.
-static bool join_ssid_with_helper(const ScannedAp *aps, int count, const char *ssid,
-                                  const char *password)
-{
-  if (ssid == NULL || ssid[0] == '\0' || count <= 0) {
-    return false;
-  }
-  const int limit = count < 2 ? count : 2;
-  for (int i = 0; i < limit; i++) {
-    const ScannedAp &ap = aps[i];
-    wifi_idle();
-    use_dhcp();
-    Serial.printf("WiFi trying '%s' ch%d rssi=%d bssid=%02x:%02x:%02x\n",
-                  ssid, (int)ap.channel, (int)ap.rssi,
-                  ap.bssid[3], ap.bssid[4], ap.bssid[5]);
-    WiFi.begin(ssid, password, ap.channel, ap.bssid, true);
-    if (!wait_for_ip(12000)) {
-      Serial.printf("WiFi status=%d no IP\n", (int)WiFi.status());
-      continue;
-    }
-    Serial.printf("WiFi IP %s\n", WiFi.localIP().toString().c_str());
-    backend_set_target(BACKEND_HOST, BACKEND_PORT, BACKEND_SCHEME);
-    return true;
-  }
-  return false;
-}
 
 static bool try_join(const char *ssid, const char *password, uint32_t timeout_ms)
 {
@@ -328,7 +238,7 @@ static void overwrite_saved_helper(void)
   backend_set_target(BACKEND_HOST, BACKEND_PORT, BACKEND_SCHEME);
 }
 
-// A helper address learned on Makers is useless on the phone hotspot.
+// A helper address learned on another network is useless on the phone hotspot.
 // Drop it unless it is this Mac's saved address or it sits on the current subnet.
 static void forget_stale_helper(void)
 {
@@ -509,6 +419,8 @@ static bool join_hotspot(void)
   return false;
 }
 
+// With a hotspot configured the pin joins nothing else; wifi_maintain() keeps
+// retrying it. Home Wi-Fi is used only when no hotspot is set.
 static bool join_known_networks(uint32_t timeout_ms)
 {
   (void)timeout_ms;
@@ -520,38 +432,21 @@ static bool join_known_networks(uint32_t timeout_ms)
   watch_disconnects();
   wifi_idle();
 
-  const int n = WiFi.scanNetworks(false, true, false, 500);
-  Serial.printf("WiFi scan found %d networks\n", n);
-  for (int i = 0; i < n; i++) {
-    Serial.printf("  '%s' ch%d rssi=%d\n", WiFi.SSID(i).c_str(), (int)WiFi.channel(i),
-                  (int)WiFi.RSSI(i));
+  if (WIFI_SSID_2[0] != '\0') {
+    return join_hotspot();
   }
-  const String home_exact = scanned_ssid(n, WIFI_SSID);
-  const bool hotspot_visible = scanned_ssid(n, WIFI_SSID_2).length() > 0;
-  Serial.printf("'%s' visible: %s\n", WIFI_SSID_2, hotspot_visible ? "yes" : "no");
+  return try_join(WIFI_SSID, WIFI_PASSWORD, 18000);
+}
 
-  // Hotspot first. Makers only if MG’s iPhone is not in the scan; while it is
-  // visible, wifi_maintain() keeps retrying the hotspot instead.
-  if (join_hotspot()) {
-    return true;
+static void begin_configured_network(void)
+{
+  if (WIFI_SSID_2[0] != '\0') {
+    use_hotspot_address();
+    WiFi.begin(WIFI_SSID_2, WIFI_PASSWORD_2);
+  } else {
+    use_dhcp();
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
-  if (hotspot_visible) {
-    return false;
-  }
-  if (WIFI_SSID_3[0] != '\0' && try_join(WIFI_SSID_3, WIFI_PASSWORD_3, 15000) &&
-      wait_for_ip(8000)) {
-    Serial.printf("WiFi IP %s\n", WiFi.localIP().toString().c_str());
-    return true;
-  }
-  ScannedAp event_aps[8];
-  const int event_count = collect_aps(n, WIFI_SSID_3, event_aps, 8);
-  if (join_ssid_with_helper(event_aps, event_count, WIFI_SSID_3, WIFI_PASSWORD_3)) {
-    return true;
-  }
-  if (home_exact.length() && try_join(home_exact.c_str(), WIFI_PASSWORD, 18000)) {
-    return true;
-  }
-  return WiFi.status() == WL_CONNECTED;
 }
 
 static void print_link(void)
@@ -597,16 +492,7 @@ static void wifi_wake_task(void *arg)
   watch_disconnects();
   // Rejoin the phone hotspot by name. A bare begin() has no saved network
   // after WIFI_OFF, which forced a slow full scan on every wake.
-  if (WIFI_SSID_2[0] != '\0') {
-    use_hotspot_address();
-    WiFi.begin(WIFI_SSID_2, WIFI_PASSWORD_2);
-  } else if (WIFI_SSID_3[0] != '\0') {
-    use_dhcp();
-    WiFi.begin(WIFI_SSID_3, WIFI_PASSWORD_3);
-  } else {
-    use_dhcp();
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  }
+  begin_configured_network();
   const uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED && (millis() - start) < 8000) {
     vTaskDelay(pdMS_TO_TICKS(40));
@@ -649,16 +535,7 @@ bool wifi_quick_join(uint32_t timeout_ms)
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
   watch_disconnects();
-  if (WIFI_SSID_2[0] != '\0') {
-    use_hotspot_address();
-    WiFi.begin(WIFI_SSID_2, WIFI_PASSWORD_2);
-  } else if (WIFI_SSID_3[0] != '\0') {
-    use_dhcp();
-    WiFi.begin(WIFI_SSID_3, WIFI_PASSWORD_3);
-  } else {
-    use_dhcp();
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  }
+  begin_configured_network();
   const uint32_t start = millis();
   while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeout_ms) {
     vTaskDelay(pdMS_TO_TICKS(100));

@@ -4,31 +4,44 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SECRETS="${ROOT}/firmware/lcd-0.85/wifi_secrets.h"
+BACKEND="${ROOT}/firmware/lcd-0.85/backend_config.h"
 HELPER="${ROOT}/backend/voice_notes"
 LOG="${HELPER}/venue-helper.log"
 PIDFILE="${HELPER}/venue-helper.pid"
 
-if [[ ! -f "$SECRETS" ]]; then
-  echo "Missing $SECRETS — copy wifi_secrets.example.h first." >&2
-  exit 1
-fi
+for f in "$SECRETS" "$BACKEND"; do
+  if [[ ! -f "$f" ]]; then
+    echo "Missing $f — copy the matching .example.h first." >&2
+    exit 1
+  fi
+done
 
-eval "$(python3 - "$SECRETS" <<'PY'
+eval "$(python3 - "$SECRETS" "$BACKEND" <<'PY'
 import re, shlex, sys
-text = open(sys.argv[1], encoding="utf-8").read()
+secrets = open(sys.argv[1], encoding="utf-8").read()
+backend = open(sys.argv[2], encoding="utf-8").read()
 
-def grab(key):
+def grab(text, key, name):
     m = re.search(rf'#define\s+{re.escape(key)}\s+"((?:\\.|[^"\\])*)"', text)
     if not m:
-        raise SystemExit(f"missing {key} in wifi_secrets.h")
-    # wifi_secrets.h stores the apostrophe as C hex bytes (\xe2\x80\x99).
+        raise SystemExit(f"missing {key} in {name}")
+    # wifi_secrets.h may store an apostrophe as C hex bytes (\xe2\x80\x99).
     raw = m.group(1).encode("utf-8").decode("unicode_escape")
     return raw.encode("latin1").decode("utf-8")
 
-print(f"SSID={shlex.quote(grab('WIFI_SSID_2'))}")
-print(f"PASSWORD={shlex.quote(grab('WIFI_PASSWORD_2'))}")
+print(f"SSID={shlex.quote(grab(secrets, 'WIFI_SSID_2', 'wifi_secrets.h'))}")
+print(f"PASSWORD={shlex.quote(grab(secrets, 'WIFI_PASSWORD_2', 'wifi_secrets.h'))}")
+print(f"HOST={shlex.quote(grab(backend, 'BACKEND_HOST', 'backend_config.h'))}")
 PY
 )"
+
+case "$HOST" in
+  172.20.10.*) ;;
+  *)
+    echo "BACKEND_HOST is $HOST; it must be on the iPhone hotspot subnet (172.20.10.x)." >&2
+    exit 1
+    ;;
+esac
 
 wifi_device() {
   networksetup -listallhardwareports | awk '
@@ -37,9 +50,24 @@ wifi_device() {
   '
 }
 
+wifi_service() {
+  networksetup -listallhardwareports | awk -F ': ' '
+    /Hardware Port:/ {port=$2}
+    /Device:/ && $2 == dev {print port; exit}
+  ' dev="$1"
+}
+
+# ipconfig redacts the SSID on recent macOS; system_profiler does not.
+current_network() {
+  system_profiler SPAirPortDataType 2>/dev/null | awk '
+    /Current Network Information:/ {grab=1; next}
+    grab && !name && /:$/ {sub(/^[ \t]+/, ""); sub(/:$/, ""); name=$0; next}
+    grab && /Channel:/ {sub(/^[ \t]+Channel: /, ""); print name "\t" $0; exit}
+  '
+}
+
 current_ssid() {
-  local dev="$1"
-  ipconfig getsummary "$dev" 2>/dev/null | awk -F ' : ' '/ SSID/ {print $2; exit}' || true
+  current_network | cut -f1
 }
 
 ssid_variants() {
@@ -124,15 +152,41 @@ for _ in $(seq 1 20); do
   sleep 1
 done
 
-NOW="$(current_ssid "$DEV")"
-echo "Wi-Fi: ${NOW:-unknown}"
 if [[ -z "$IP" ]]; then
   echo "Mac joined but has no IP yet. Wait a few seconds and retry ./venue.sh." >&2
   exit 1
 fi
+
+# The pin has BACKEND_HOST baked in, so the Mac must hold exactly that address.
+if [[ "$IP" != "$HOST" ]]; then
+  SERVICE="$(wifi_service "$DEV")"
+  echo "Pinning Mac to $HOST (was $IP)…"
+  networksetup -setmanualwithdhcprouter "${SERVICE:-Wi-Fi}" "$HOST"
+  for _ in $(seq 1 20); do
+    IP="$(ipconfig getifaddr "$DEV" 2>/dev/null || true)"
+    [[ "$IP" == "$HOST" ]] && break
+    sleep 1
+  done
+  if [[ "$IP" != "$HOST" ]]; then
+    echo "Mac IP is ${IP:-none}, expected $HOST." >&2
+    exit 1
+  fi
+fi
+
+NET="$(current_network)"
+NOW="$(printf '%s' "$NET" | cut -f1)"
+CHANNEL="$(printf '%s' "$NET" | cut -f2)"
+echo "Wi-Fi: ${NOW:-unknown} (${CHANNEL:-channel unknown})"
 echo "Mac IP: $IP"
+case "$CHANNEL" in
+  *5GHz*|*6GHz*)
+    echo "WARNING: the hotspot is on ${CHANNEL}. The pin is 2.4 GHz only and will not join." >&2
+    echo "         On the phone: Settings → Personal Hotspot → Maximize Compatibility ON." >&2
+    ;;
+esac
 
 if launchctl print "gui/$(id -u)/com.voxpin.helper" >/dev/null 2>&1; then
+  LOG="${HELPER}/helper.log"
   echo "Restarting always-on helper…"
   launchctl kickstart -k "gui/$(id -u)/com.voxpin.helper"
 else
@@ -155,7 +209,7 @@ else
 fi
 
 healthy=0
-for _ in $(seq 1 20); do
+for _ in $(seq 1 60); do
   if curl -sf "http://127.0.0.1:8765/health" >/dev/null; then
     healthy=1
     break
@@ -177,5 +231,5 @@ else
   echo "Pin USB: not plugged in (ok if it is on battery)"
 fi
 echo
-echo "Ready. Power the pin; it will skip home Wi-Fi and join this hotspot."
+echo "Ready. The pin joins only '${SSID}' at 172.20.10.2 and calls http://${HOST}:8765."
 echo "Keep this Mac on the hotspot and leave the helper running."

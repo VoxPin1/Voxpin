@@ -2339,21 +2339,20 @@ def start_helper_mdns(port: int) -> None:
         print(f"mDNS advertise failed: {err}")
 
 
-def start_ipv6_server(port: int) -> None:
-    """Listen on IPv6. iPhone hotspot hides this Mac's IPv4 from the pin."""
+def serve_http(port: int) -> None:
+    """One listener for IPv4 and IPv6. The iPhone hotspot can hide this Mac's
+    IPv4 from the pin. On macOS a [::] socket also accepts IPv4, so a second
+    0.0.0.0 listener on the same port fails with "Address already in use"."""
+    from werkzeug.serving import make_server
 
-    def serve() -> None:
-        from werkzeug.serving import make_server
-
-        try:
-            httpd = make_server("::", port, app, threaded=True)
-        except OSError as err:
-            print(f"IPv6 listen failed: {err}")
-            return
-        print(f"Listening on [::]:{port}")
-        httpd.serve_forever()
-
-    threading.Thread(target=serve, name="voxpin-ipv6", daemon=True).start()
+    try:
+        httpd = make_server("::", port, app, threaded=True)
+        print(f"Listening on [::]:{port} (IPv4 and IPv6)")
+    except OSError as err:
+        print(f"IPv6 listen failed ({err}); IPv4 only")
+        httpd = make_server("0.0.0.0", port, app, threaded=True)
+        print(f"Listening on 0.0.0.0:{port}")
+    httpd.serve_forever()
 
 
 def main() -> int:
@@ -2378,7 +2377,6 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    print(f"Listening on 0.0.0.0:{args.port}")
     print(f"Companion website: http://127.0.0.1:{args.port}/")
     print(f"Notes Doc {DOCUMENT_ID}")
     print(f"Translations Doc {TRANSLATIONS_DOCUMENT_ID}")
@@ -2388,8 +2386,7 @@ def main() -> int:
         print("Google Calendar not connected. Run ./run.sh --login to show events and add reminders.")
     start_helper_beacon(args.port)
     start_helper_mdns(args.port)
-    start_ipv6_server(args.port)
-    app.run(host="0.0.0.0", port=args.port, threaded=True)
+    serve_http(args.port)
     return 0
 
 
